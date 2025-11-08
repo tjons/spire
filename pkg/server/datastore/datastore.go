@@ -86,6 +86,11 @@ type DataStore interface {
 	FetchCAJournal(ctx context.Context, activeX509AuthorityID string) (*CAJournal, error)
 	PruneCAJournals(ctx context.Context, allCAsExpireBefore int64) error
 	ListCAJournalsForTesting(ctx context.Context) ([]*CAJournal, error)
+
+	// Added temporarily(?) while experimenting with pluggable datastores
+	// TODO(tjons): figure out what to do with these
+	Close() error
+	Configure(_ context.Context, hclConfiguration string) error
 }
 
 // DataConsistency indicates the required data consistency for a read operation.

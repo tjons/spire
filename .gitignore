@@ -41,3 +41,6 @@ oci/
 # Go workspace files
 go.work
 go.work.sum
+
+# VSCode debug artifacts
+__debug_bin*

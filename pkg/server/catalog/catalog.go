@@ -23,6 +23,7 @@ import (
 	km_telemetry "github.com/spiffe/spire/pkg/common/telemetry/server/keymanager"
 	"github.com/spiffe/spire/pkg/server/cache/dscache"
 	"github.com/spiffe/spire/pkg/server/datastore"
+	ds_cassandra "github.com/spiffe/spire/pkg/server/datastore/cassandra"
 	ds_sql "github.com/spiffe/spire/pkg/server/datastore/sqlstore"
 	"github.com/spiffe/spire/pkg/server/hostservice/agentstore"
 	"github.com/spiffe/spire/pkg/server/hostservice/identityprovider"
@@ -68,6 +69,12 @@ type Config struct {
 	IdentityProvider *identityprovider.IdentityProvider
 	AgentStore       *agentstore.AgentStore
 	HealthChecker    health.Checker
+
+	Experimental ExperimentalConfig
+}
+
+type ExperimentalConfig struct {
+	AllowPluggableDatastore bool
 }
 
 type datastoreRepository struct{ datastore.Repository }
@@ -160,11 +167,18 @@ func Load(ctx context.Context, config Config) (_ *Repository, err error) {
 	// Strip out the Datastore plugin configuration and load the SQL plugin
 	// directly. This allows us to bypass gRPC and get rid of response limits.
 	dataStoreConfigs, pluginConfigs := config.PluginConfigs.FilterByType(dataStoreType)
-	sqlDataStore, err := loadSQLDataStore(ctx, config, coreConfig, dataStoreConfigs)
+	var configuredDataStore datastore.DataStore
+	if config.Experimental.AllowPluggableDatastore {
+		repo.log.Info("Cassandra datastore enabled, will allow multiple datastores from config")
+		configuredDataStore, err = loadPluggableDatastore(ctx, config, coreConfig, dataStoreConfigs)
+	} else {
+		configuredDataStore, err = loadSQLDataStore(ctx, config, coreConfig, dataStoreConfigs)
+	}
+
 	if err != nil {
 		return nil, err
 	}
-	repo.dsCloser = sqlDataStore
+	repo.dsCloser = configuredDataStore
 
 	repo.catalog, err = catalog.Load(ctx, catalog.Config{
 		Log:           config.Log,
@@ -180,7 +194,7 @@ func Load(ctx context.Context, config Config) (_ *Repository, err error) {
 		return nil, err
 	}
 
-	var dataStore datastore.DataStore = sqlDataStore
+	var dataStore datastore.DataStore = configuredDataStore
 	_ = config.HealthChecker.AddCheck("catalog.datastore", &datastore.Health{
 		DataStore: dataStore,
 	})
@@ -252,6 +266,7 @@ func ValidateConfig(ctx context.Context, config Config) (pluginNotes map[string]
 }
 
 func loadSQLDataStore(ctx context.Context, config Config, coreConfig catalog.CoreConfig, datastoreConfigs catalog.PluginConfigs) (*ds_sql.Plugin, error) {
+func loadSQLDataStore(ctx context.Context, config Config, coreConfig catalog.CoreConfig, datastoreConfigs catalog.PluginConfigs) (datastore.DataStore, error) {
 	switch {
 	case len(datastoreConfigs) == 0:
 		return nil, errors.New("expecting a DataStore plugin")
@@ -284,4 +299,46 @@ func loadSQLDataStore(ctx context.Context, config Config, coreConfig catalog.Cor
 
 	config.Log.WithField(telemetry.Reconfigurable, false).Info("Configured DataStore")
 	return ds, nil
+}
+
+func loadPluggableDatastore(ctx context.Context, config Config, coreConfig catalog.CoreConfig, datastoreConfigs catalog.PluginConfigs) (datastore.DataStore, error) {
+	switch {
+	case len(datastoreConfigs) == 0:
+		return nil, errors.New("expecting at least one DataStore plugin")
+	case len(datastoreConfigs) > 1:
+		return loadDatastoreMultiple(ctx, config, coreConfig, datastoreConfigs)
+	}
+
+	singleDatastore := datastoreConfigs[0]
+	var ds datastore.DataStore
+	var err error
+	dsLog := config.Log.WithField(telemetry.SubsystemName, singleDatastore.Name)
+
+	switch singleDatastore.Name {
+	case ds_sql.PluginName:
+		ds = ds_sql.New(dsLog)
+	case ds_cassandra.PluginName:
+		ds = ds_cassandra.New(dsLog)
+	default:
+		return nil, fmt.Errorf("unsupported datastore plugin: %s", singleDatastore.Name)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	configurer := catalog.ConfigurerFunc(func(ctx context.Context, _ catalog.CoreConfig, configuration string) error {
+		return ds.Configure(ctx, configuration)
+	})
+
+	if _, err := catalog.ConfigurePlugin(ctx, coreConfig, configurer, singleDatastore.DataSource, ""); err != nil {
+		return nil, err
+	}
+
+	config.Log.WithField(telemetry.Reconfigurable, false).Info("Configured Pluggable DataStore; expect unstable behavior")
+	return ds, nil
+}
+
+func loadDatastoreMultiple(ctx context.Context, config Config, coreConfig catalog.CoreConfig, datastoreConfigs catalog.PluginConfigs) (datastore.DataStore, error) {
+	return nil, errors.New("multiple datastores are not supported")
 }

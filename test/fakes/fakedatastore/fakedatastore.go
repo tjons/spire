@@ -56,6 +56,14 @@ func New(tb testing.TB) *DataStore {
 	}
 }
 
+func (s *DataStore) Configure(ctx context.Context, hclConfiguration string) error {
+	return nil // This is intentionally a no-op for the fake datastore
+}
+
+func (s *DataStore) Close() error {
+	return s.ds.Close()
+}
+
 func (s *DataStore) CreateBundle(ctx context.Context, bundle *common.Bundle) (*common.Bundle, error) {
 	if err := s.getNextError(); err != nil {
 		return nil, err
