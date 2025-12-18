@@ -13,6 +13,7 @@ services:
     
   spire-cass:
     container_name: spire-cass
+    image: cassandra:5
     ports:
       - "9042:9042"
     environment:

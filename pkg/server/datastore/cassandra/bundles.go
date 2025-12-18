@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/spiffe/spire/pkg/server/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
 )
@@ -46,18 +45,27 @@ func (db *plugin) UpdateBundle(context.Context, *common.Bundle, *common.BundleMa
 }
 
 type Bundle struct { // TODO(tjons): next step is to create model objects I think
+	Model
+
+	TrustDomain string // In the gorm implementation this is not null and must be unique
+	Data        []byte
+
+	// FederatedEntries []RegisteredEntry
+}
 
 // copied from sqlstore.go:4538
 func bundleToModel(pb *common.Bundle) (*Bundle, error) {
-	if pb == nil {
-		return nil, newSQLError("missing bundle in request")
-	}
-	data, err := proto.Marshal(pb)
-	if err != nil {
-		return nil, newWrappedSQLError(err)
-	}
-	return &Bundle{
-		TrustDomain: pb.TrustDomainId,
-		Data:        data,
-	}, nil
+	// if pb == nil {
+	// 	return nil, newSQLError("missing bundle in request")
+	// }
+	// data, err := proto.Marshal(pb)
+	// if err != nil {
+	// 	return nil, newWrappedSQLError(err)
+	// }
+	// return &Bundle{
+	// 	TrustDomain: pb.TrustDomainId,
+	// 	Data:        data,
+	// }, nil
+
+	return nil, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	agocql "github.com/apache/cassandra-gocql-driver/v2"
 	"github.com/gocql/gocql"
@@ -162,4 +163,10 @@ func (p *plugin) applyMigrations() error {
 	}
 
 	return nil
+}
+
+type Model struct {
+	ID        uint
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
