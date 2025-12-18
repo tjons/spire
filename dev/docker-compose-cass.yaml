@@ -9,7 +9,7 @@ services:
     tmpfs:
       - /var/lib/postgresql
     ports:
-      - "9999:5432"
+      - "9989:5432"
     
   spire-cass:
     container_name: spire-cass
