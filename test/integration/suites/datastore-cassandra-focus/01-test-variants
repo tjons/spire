@@ -5,7 +5,7 @@ test-cassandra() {
 
     docker-up "${SERVICE}"
 
-    # Wait up to two minutes for postgres to be available. It should come up
+    # Wait up to two minutes for cassandra to be available. It should come up
     # pretty quick on developer machines but CI/CD is slow.
     MAXCHECKS=40
     CHECKINTERVAL=3
@@ -24,7 +24,7 @@ test-cassandra() {
     fi
 
     log-info "running tests against ${SERVICE}..."
-    ./cassandra.test || fail-now "tests failed"
+    ./cassandra.test -testify.m '^(TestBundleCRUD)$' || fail-now "tests failed"
     docker-stop "${SERVICE}"
 }
 

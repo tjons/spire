@@ -190,6 +190,7 @@ func (s *PluginSuite) newPlugin() datastore.DataStore {
 		s.Require().True(len(parts) == 2, "addresses and keyspace must both be provided for cassandra tests")
 		keyspace := parts[1]
 		var addresses []string
+		s.T().Log(parts[0])
 		err := json.Unmarshal([]byte(parts[0]), &addresses)
 		s.Require().NoError(err, "addresses should be a valid json string containing an array of strings")
 
