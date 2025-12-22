@@ -19,7 +19,7 @@ services:
       - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
       - CASSANDRA_DC=localdev
     volumes:
-      - cassandra-node-1:/var/lib/cassandra:rw
+      - cassandra-integ-test-node:/var/lib/cassandra:rw
     restart:
       on-failure
     healthcheck:
@@ -31,4 +31,4 @@ services:
 
 
 volumes:
-  cassandra-node-1:
+  cassandra-integ-test-node:

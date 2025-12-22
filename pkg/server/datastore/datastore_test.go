@@ -195,6 +195,11 @@ func (s *PluginSuite) newPlugin() datastore.DataStore {
 		s.Require().NoError(err, "addresses should be a valid json string containing an array of strings")
 
 		wipeCassandra(s.T(), addresses, keyspace)
+		err = ds.Configure(ctx, fmt.Sprintf(`
+		cassandra_addresses = ["%s"]
+		cassandra_keyspace = "%s"
+		`, strings.Join(addresses, `", "`), keyspace))
+		s.Require().NoError(err)
 	default:
 		s.Require().FailNowf("Unsupported external test dialect %q", TestDialect)
 	}

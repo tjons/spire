@@ -2,9 +2,11 @@ package cassandra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/gocql/gocql"
 	"github.com/gogo/protobuf/proto"
 	"github.com/spiffe/spire/pkg/server/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
@@ -31,11 +33,16 @@ func (p *plugin) FetchBundle(ctx context.Context, trustDomainID string) (*common
 	SELECT
 		data
 	FROM bundles
-	WHERE trust_domain = $1
+	WHERE trust_domain = ?
 	`
 	var data []byte
 	query := p.db.session.QueryWithContext(ctx, q, trustDomainID)
 	if err := query.Scan(&data); err != nil {
+		if errors.Is(err, gocql.ErrNotFound) {
+			// The existing datastore implementation does not return an error when no results are found
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("Error scanning from bundles: %w", err)
 	}
 
