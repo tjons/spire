@@ -2,45 +2,72 @@ package cassandra
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/spiffe/spire/pkg/server/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
 )
 
-func (db *plugin) AppendBundle(context.Context, *common.Bundle) (*common.Bundle, error) {
+func (p *plugin) AppendBundle(context.Context, *common.Bundle) (*common.Bundle, error) {
 	return nil, NotImplementedErr
 }
 
-func (db *plugin) CountBundles(context.Context) (int32, error) {
+func (p *plugin) CountBundles(context.Context) (int32, error) {
 	return 0, NotImplementedErr
 }
 
-func (db *plugin) CreateBundle(context.Context, *common.Bundle) (*common.Bundle, error) {
+func (p *plugin) CreateBundle(context.Context, *common.Bundle) (*common.Bundle, error) {
 	return nil, NotImplementedErr
 }
 
-func (db *plugin) DeleteBundle(ctx context.Context, trustDomainID string, mode datastore.DeleteMode) error {
+func (p *plugin) DeleteBundle(ctx context.Context, trustDomainID string, mode datastore.DeleteMode) error {
 	return NotImplementedErr
 }
 
-func (db *plugin) FetchBundle(ctx context.Context, trustDomainID string) (*common.Bundle, error) {
+func (p *plugin) FetchBundle(ctx context.Context, trustDomainID string) (*common.Bundle, error) {
+	q := `
+	SELECT
+		data
+	FROM bundles
+	WHERE trust_domain = $1
+	`
+	var data []byte
+	query := p.db.session.QueryWithContext(ctx, q, trustDomainID)
+	if err := query.Scan(&data); err != nil {
+		return nil, fmt.Errorf("Error scanning from bundles: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, fmt.Errorf("No bundle found with trust domain ID %s", trustDomainID)
+	}
+
+	return dataToBundle(data)
+}
+
+func dataToBundle(data []byte) (*common.Bundle, error) {
+	bundle := new(common.Bundle)
+	if err := proto.Unmarshal(data, bundle); err != nil {
+		return nil, err
+	}
+
+	return bundle, nil
+}
+
+func (p *plugin) ListBundles(context.Context, *datastore.ListBundlesRequest) (*datastore.ListBundlesResponse, error) {
 	return nil, NotImplementedErr
 }
 
-func (db *plugin) ListBundles(context.Context, *datastore.ListBundlesRequest) (*datastore.ListBundlesResponse, error) {
-	return nil, NotImplementedErr
-}
-
-func (db *plugin) PruneBundle(ctx context.Context, trustDomainID string, expiresBefore time.Time) (changed bool, err error) {
+func (p *plugin) PruneBundle(ctx context.Context, trustDomainID string, expiresBefore time.Time) (changed bool, err error) {
 	return false, NotImplementedErr
 }
 
-func (db *plugin) SetBundle(context.Context, *common.Bundle) (*common.Bundle, error) {
+func (p *plugin) SetBundle(context.Context, *common.Bundle) (*common.Bundle, error) {
 	return nil, NotImplementedErr
 }
 
-func (db *plugin) UpdateBundle(context.Context, *common.Bundle, *common.BundleMask) (*common.Bundle, error) {
+func (p *plugin) UpdateBundle(context.Context, *common.Bundle, *common.BundleMask) (*common.Bundle, error) {
 	return nil, NotImplementedErr
 }
 
