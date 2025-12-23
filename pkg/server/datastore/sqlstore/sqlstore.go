@@ -1371,6 +1371,7 @@ func countBundles(tx *gorm.DB) (int32, error) {
 
 // listBundles can be used to fetch all existing bundles.
 func listBundles(tx *gorm.DB, req *datastore.ListBundlesRequest) (*datastore.ListBundlesResponse, error) {
+	// TODO(tjons): this is not nil safe and will panic on an empty req value!
 	if req.Pagination != nil && req.Pagination.PageSize == 0 {
 		return nil, status.Error(codes.InvalidArgument, "cannot paginate with pagesize = 0")
 	}
@@ -1407,6 +1408,7 @@ func listBundles(tx *gorm.DB, req *datastore.ListBundlesRequest) (*datastore.Lis
 			return nil, err
 		}
 
+		// TODO(tjons): we can improve the performance of this by pre-allocating the length of Bundles
 		resp.Bundles = append(resp.Bundles, bundle)
 	}
 

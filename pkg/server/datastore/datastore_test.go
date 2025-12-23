@@ -54,12 +54,21 @@ var (
 )
 
 const (
-	_ttl                   = time.Hour
-	_expiredNotAfterString = "2018-01-10T01:34:00+00:00"
-	_validNotAfterString   = "2018-01-10T01:36:00+00:00"
-	_middleTimeString      = "2018-01-10T01:35:00+00:00"
-	_notFoundErrMsg        = "datastore-sql: record not found"
+	_ttl                                   = time.Hour
+	_expiredNotAfterString                 = "2018-01-10T01:34:00+00:00"
+	_validNotAfterString                   = "2018-01-10T01:36:00+00:00"
+	_middleTimeString                      = "2018-01-10T01:35:00+00:00"
+	datastoreSQLNotFoundErrorMessage       = "datastore-sql: record not found"
+	datastoreCassandraNotFoundErrorMessage = "datastore-cassandra: record not found"
 )
+
+var _notFoundErrMsg = func() string {
+	if TestDialect == "cassandra" {
+		return datastoreCassandraNotFoundErrorMessage
+	}
+
+	return datastoreSQLNotFoundErrorMessage
+}()
 
 func TestPlugin(t *testing.T) {
 	spiretest.Run(t, new(PluginSuite))

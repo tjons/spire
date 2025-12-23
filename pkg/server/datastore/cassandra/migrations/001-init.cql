@@ -59,12 +59,12 @@ CREATE TABLE IF NOT EXISTS attested_node_entries_events (
 );
 
 CREATE TABLE IF NOT EXISTS bundles (
-    id int, 
     created_at timestamp,
     updated_at timestamp,
     trust_domain varchar,
     data blob,
-    PRIMARY KEY (trust_domain, id)
+
+    PRIMARY KEY (trust_domain)
 );
 
 CREATE TABLE IF NOT EXISTS ca_journals (
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS dns_names (
 );
 
 --- TODO(tjons): good case for consolidation...
-CREATE TALBE IF NOT EXISTS federated_registration_entries (
+CREATE TABLE IF NOT EXISTS federated_registration_entries (
     bundle_id int,
     registered_entry_id int,
     PRIMARY KEY (registered_entry_id, bundle_id)

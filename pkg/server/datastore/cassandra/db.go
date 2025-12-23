@@ -65,7 +65,31 @@ func (p *plugin) Configure(ctx context.Context, hclConfiguration string) error {
 
 	p.cfg = cfg
 
-	return p.openConnections(p.cfg)
+	var (
+		maxAttempts     = 5
+		successful      bool
+		err             error
+		backoffDuration = 300 * time.Millisecond
+	)
+	for range maxAttempts {
+		if successful {
+			break
+		}
+
+		err = p.openConnections(p.cfg)
+		if err != nil {
+			p.log.Debugf("Error attempting to initialize connection to Cassandra: %s", err.Error())
+			time.Sleep(backoffDuration)
+		} else {
+			successful = true
+		}
+	}
+
+	if !successful {
+		return err
+	}
+
+	return nil
 }
 
 func (p *plugin) openConnections(config *configuration) error {
