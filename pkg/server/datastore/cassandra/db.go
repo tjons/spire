@@ -69,7 +69,7 @@ func (p *plugin) Configure(ctx context.Context, hclConfiguration string) error {
 		maxAttempts     = 5
 		successful      bool
 		err             error
-		backoffDuration = 300 * time.Millisecond
+		backoffDuration = 1500 * time.Millisecond
 	)
 	for range maxAttempts {
 		if successful {
@@ -78,7 +78,7 @@ func (p *plugin) Configure(ctx context.Context, hclConfiguration string) error {
 
 		err = p.openConnections(p.cfg)
 		if err != nil {
-			p.log.Debugf("Error attempting to initialize connection to Cassandra: %s", err.Error())
+			p.log.Errorf("Error attempting to initialize connection to Cassandra: %s", err.Error())
 			time.Sleep(backoffDuration)
 		} else {
 			successful = true

@@ -2,19 +2,19 @@ package cassandra
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/gogo/protobuf/proto"
 	"github.com/spiffe/spire/pkg/common/bundleutil"
 	"github.com/spiffe/spire/pkg/common/protoutil"
 	"github.com/spiffe/spire/pkg/server/datastore"
 	"github.com/spiffe/spire/proto/spire/common"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // TODO(tjons): needs some thought put into consistency for this one...
@@ -39,7 +39,7 @@ func (p *plugin) AppendBundle(ctx context.Context, b *common.Bundle) (*common.Bu
 			return nil, err
 		}
 
-		saveQ := `UPDATE bundles SET data = ?, updated_at = now() WHERE trust_domain = ?`
+		saveQ := `UPDATE bundles SET data = ?, updated_at = toTimestamp(now()) WHERE trust_domain = ?`
 		if err = p.db.session.QueryWithContext(
 			ctx, saveQ, newModel.Data, newModel.TrustDomain,
 		).Exec(); err != nil {
@@ -138,24 +138,23 @@ func (p *plugin) ListBundles(ctx context.Context, req *datastore.ListBundlesRequ
 		return nil, status.Error(codes.InvalidArgument, "cannot paginate with pagesize = 0")
 	}
 
+	// use `token(trust_domain) > x for pagination`
 	var (
-		q      = `SELECT trust_domain, created_at, data FROM bundles`
+		q      = `SELECT DISTINCT trust_domain, data FROM bundles`
 		params = make([]any, 0)
 	)
 	if req.Pagination != nil {
 		if len(req.Pagination.Token) > 0 {
-			token, err := strconv.Atoi(req.Pagination.Token)
+			token, err := base64.RawStdEncoding.DecodeString(req.Pagination.Token)
 			if err != nil {
-				return nil, status.Error(codes.InvalidArgument, "pagination token invalid")
+				return nil, status.Error(codes.InvalidArgument, "pagination token could not be decoded")
 			}
 
-			q += " WHERE created_at > ?"
+			q += " WHERE TOKEN(trust_domain) > ?"
 			params = append(params, token)
 		}
-		q += " PER PARTITION LIMIT 1 LIMIT ?"
+		q += " LIMIT ?"
 		params = append(params, req.Pagination.PageSize)
-	} else {
-		q += " PER PARTITION LIMIT 1" // limit partition row return size because I think we're going to have to add partition rows for the federated_entry_relationships
 	}
 
 	resp := &datastore.ListBundlesResponse{
@@ -169,7 +168,7 @@ func (p *plugin) ListBundles(ctx context.Context, req *datastore.ListBundlesRequ
 			return nil, newWrappedCassandraError(err)
 		}
 		if req.Pagination != nil {
-			req.Pagination.Token = strconv.FormatInt(b.CreatedAt.UnixMilli(), 10)
+			req.Pagination.Token = base64.RawStdEncoding.EncodeToString([]byte(b.TrustDomain))
 		}
 
 		cb, err := dataToBundle(b.Data)
@@ -212,7 +211,7 @@ func (p *plugin) PruneBundle(ctx context.Context, trustDomainID string, expiresB
 func bundleExistsForTrustDomain(s *gocql.Session, trustDomainID string) (bool, error) {
 	var id int
 	existsQ := `
-	SELECT id
+	SELECT data
 	FROM bundles
 	WHERE trust_domain = ?`
 
@@ -255,19 +254,34 @@ func createBundle(s *gocql.Session, newBundle *common.Bundle) (*common.Bundle, e
 		return nil, err
 	}
 
-	// TODO(tjons): determine if we actually need IDs for bundles, or if trust domains are sufficent.
-	// For now, just use trust domains.
+	// The Bundle will always have a row set with an empty federated_entry_spiffe_id.
+	// This allows federation relationships to come and go without impacting the bundle data itself,
+	// and simplifies query patterns.
 	createQ := `
-	INSERT INTO bundles (created_at, updated_at, trust_domain, data)
-	VALUES (current_timestamp(), current_timestamp(), ?, ?)
+	INSERT INTO bundles (created_at, updated_at, trust_domain, data, federated_entry_spiffe_id)
+	VALUES (toTimestamp(now()), toTimestamp(now()), ?, ?, '') IF NOT EXISTS
 	`
 	query := s.Query(createQ, model.TrustDomain, model.Data)
 	// TODO(tjons): the use of Quorum consistency here is probably something we
 	// want to think about a bit more, but for a POC it's sufficient.
 	// Consider whether we'd be better off using the versioned compare and set approach.
 	query.Consistency(gocql.Quorum)
-	if err := query.Exec(); err != nil {
+
+	var (
+		queryResult = make(map[string]any)
+		executed    bool
+	)
+
+	if executed, err = query.MapScanCAS(queryResult); err != nil {
 		return nil, newWrappedCassandraError(err)
+	}
+
+	if !executed {
+		return nil, status.Error(codes.AlreadyExists, "bundle with that trust domain ID already exists")
+	}
+
+	if len(queryResult) > 0 {
+		print("weird stuff")
 	}
 
 	return newBundle, nil
@@ -281,7 +295,7 @@ func updateBundle(s *gocql.Session, newBundle *common.Bundle, mask *common.Bundl
 
 	existingModel := &Bundle{}
 	readQ := `
-	SELECT created_at, updated_at, trust_domain, data
+	SELECT DISTINCT created_at, updated_at, trust_domain, data
 	FROM bundles WHERE trust_domain = ?
 	`
 
@@ -307,7 +321,7 @@ func updateBundle(s *gocql.Session, newBundle *common.Bundle, mask *common.Bundl
 
 	updateQ := `
 	UPDATE bundles 
-	SET updated_at = now(),
+	SET updated_at = toTimestamp(now()),
 		data = ?
 	WHERE trust_domain = ?
 	`

@@ -298,7 +298,7 @@ func (s *PluginSuite) TestBundleCRUD() {
 
 	// create again (constraint violation)
 	_, err = s.ds.CreateBundle(ctx, bundle)
-	s.Equal(status.Code(err), codes.AlreadyExists)
+	s.Require().Equal(status.Code(err), codes.AlreadyExists)
 
 	// fetch
 	fb, err = s.ds.FetchBundle(ctx, "spiffe://foo")
