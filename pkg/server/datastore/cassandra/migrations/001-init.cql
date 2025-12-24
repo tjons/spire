@@ -1,5 +1,4 @@
 CREATE TABLE IF NOT EXISTS registered_entries (
-    id int,
     created_at timestamp,
     updated_at timestamp,
     entry_id varchar,
@@ -13,8 +12,21 @@ CREATE TABLE IF NOT EXISTS registered_entries (
     store_svid boolean,
     hint varchar,
     jwt_svid_ttl int,
-    PRIMARY KEY (entry_id)
+    selector_type varchar,
+    selector_value varchar,
+    dns_names set<text>,
+    federated_trust_domains set<text>,
+    PRIMARY KEY (spiffe_id, parent_id, selector_type, selector_value)
 );
+
+CREATE INDEX IF NOT EXISTS parent_id_idx ON registered_entries (parent_id) USING 'sai';
+CREATE INDEX IF NOT EXISTS entry_id_idx ON registered_entries (entry_id) USING 'sai';
+CREATE INDEX IF NOT EXISTS hint_idx ON registered_entries (hint) USING 'sai';
+CREATE INDEX IF NOT EXISTS federated_trust_domain_idx ON registered_entries (federated_trust_domains) USING 'sai';
+CREATE INDEX IF NOT EXISTS downstream_idx ON registered_entries (downstream) USING 'sai';
+CREATE INDEX IF NOT EXISTS selector_type_idx ON registered_entries (selector_type) USING 'sai';
+CREATE INDEX IF NOT EXISTS selector_value_idx ON registered_entries (selector_value) USING 'sai';
+
 
 --- TODO:(tjons) should this be collapsed with the above?
 CREATE TABLE IF NOT EXISTS registered_entries_events (

@@ -7,21 +7,21 @@ import (
 	"github.com/spiffe/spire/pkg/server/datastore"
 )
 
-func (db *plugin) ListAttestedNodeEvents(ctx context.Context, req *datastore.ListAttestedNodeEventsRequest) (*datastore.ListAttestedNodeEventsResponse, error) {
+func (p *plugin) ListAttestedNodeEvents(ctx context.Context, req *datastore.ListAttestedNodeEventsRequest) (*datastore.ListAttestedNodeEventsResponse, error) {
 	return nil, NotImplementedErr
 
 }
-func (db *plugin) PruneAttestedNodeEvents(ctx context.Context, olderThan time.Duration) error {
+func (p *plugin) PruneAttestedNodeEvents(ctx context.Context, olderThan time.Duration) error {
 	return NotImplementedErr
 }
-func (db *plugin) FetchAttestedNodeEvent(ctx context.Context, eventID uint) (*datastore.AttestedNodeEvent, error) {
+func (p *plugin) FetchAttestedNodeEvent(ctx context.Context, eventID uint) (*datastore.AttestedNodeEvent, error) {
 	return nil, NotImplementedErr
 
 }
-func (db *plugin) CreateAttestedNodeEventForTesting(ctx context.Context, event *datastore.AttestedNodeEvent) error {
+func (p *plugin) CreateAttestedNodeEventForTesting(ctx context.Context, event *datastore.AttestedNodeEvent) error {
 	return NotImplementedErr
 
 }
-func (db *plugin) DeleteAttestedNodeEventForTesting(ctx context.Context, eventID uint) error {
+func (p *plugin) DeleteAttestedNodeEventForTesting(ctx context.Context, eventID uint) error {
 	return NotImplementedErr
 }

@@ -582,6 +582,7 @@ func (ds *Plugin) DeleteRegistrationEntry(ctx context.Context,
 	return registrationEntry, nil
 }
 
+// TODO(tjons): this is not correct
 // PruneRegistrationEntries takes a registration entry message, and deletes all entries which have expired
 // before the date in the message
 func (ds *Plugin) PruneRegistrationEntries(ctx context.Context, expiresBefore time.Time) (err error) {
@@ -4143,7 +4144,7 @@ func pruneRegistrationEntries(tx *gorm.DB, expiresBefore time.Time, logger logru
 
 func createRegistrationEntryEvent(tx *gorm.DB, event *datastore.RegistrationEntryEvent) error {
 	if err := tx.Create(&RegisteredEntryEvent{
-		Model: Model{
+		Model: Model{ //TODO(tjons): this feels wrong?
 			ID: event.EventID,
 		},
 		EntryID: event.EntryID,

@@ -280,10 +280,6 @@ func createBundle(s *gocql.Session, newBundle *common.Bundle) (*common.Bundle, e
 		return nil, status.Error(codes.AlreadyExists, "bundle with that trust domain ID already exists")
 	}
 
-	if len(queryResult) > 0 {
-		print("weird stuff")
-	}
-
 	return newBundle, nil
 }
 

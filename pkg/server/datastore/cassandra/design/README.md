@@ -16,7 +16,15 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 - Validation of MySQL without replication in pluggable mode
 - Validation of MySQL with replication in pluggable mode
 - Cassandra tests with pluggable mode
+- Isolatable debuggable tests
+- Bundles
 
 ## To Be Implemented
 - Pagination
 - sqlite tests in pluggable integration test mode
+- Bundle federation relationship and deletion interactions
+- general approach to consistency
+- use gocql, not scylladb 
+- replace migrations
+- configurable topology strategy
+- allow running test suite after failure
