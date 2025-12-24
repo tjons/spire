@@ -164,7 +164,7 @@ func (p *plugin) ListBundles(ctx context.Context, req *datastore.ListBundlesRequ
 	scanner := query.Iter().Scanner()
 	for scanner.Next() {
 		b := Bundle{}
-		if err := scanner.Scan(&b.TrustDomain, &b.CreatedAt, &b.Data); err != nil {
+		if err := scanner.Scan(&b.TrustDomain, &b.Data); err != nil {
 			return nil, newWrappedCassandraError(err)
 		}
 		if req.Pagination != nil {
@@ -209,14 +209,14 @@ func (p *plugin) PruneBundle(ctx context.Context, trustDomainID string, expiresB
 }
 
 func bundleExistsForTrustDomain(s *gocql.Session, trustDomainID string) (bool, error) {
-	var id int
+	var count int
 	existsQ := `
-	SELECT data
+	SELECT COUNT(*)
 	FROM bundles
 	WHERE trust_domain = ?`
 
 	query := s.Query(existsQ, trustDomainID)
-	if err := query.Scan(&id); err != nil {
+	if err := query.Scan(&count); err != nil {
 		if errors.Is(err, gocql.ErrNotFound) {
 			return false, nil
 		}
@@ -224,7 +224,7 @@ func bundleExistsForTrustDomain(s *gocql.Session, trustDomainID string) (bool, e
 		return false, err
 	}
 
-	return true, nil
+	return count > 0, nil
 }
 
 func (p *plugin) SetBundle(ctx context.Context, b *common.Bundle) (*common.Bundle, error) {
