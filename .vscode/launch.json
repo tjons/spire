@@ -38,7 +38,10 @@
             ],
             "args": [
                 "-testify.m",
-                "^(TestBundleCRUD)$"
+                // "^(TestBundleCRUD|TestCreateRegistrationEntry)$",
+                // "^(TestBundleCRUD|TestCountBundles|TestBundlePrune|TestSetBundle|TestListBundlesWithPagination)$",
+                // "^(TestBundleCRUD|TestCountBundles|TestBundlePrune|TestSetBundle)$",
+                "^(TestListRegistrationEntries)$"
             ],
             "preLaunchTask":"start cassandra",
             "postDebugTask": "stop cassandra",

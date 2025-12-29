@@ -33,7 +33,7 @@ type DataStore interface {
 	CountRegistrationEntries(context.Context, *CountRegistrationEntriesRequest) (int32, error)
 	CreateRegistrationEntry(context.Context, *common.RegistrationEntry) (*common.RegistrationEntry, error)
 	CreateOrReturnRegistrationEntry(context.Context, *common.RegistrationEntry) (*common.RegistrationEntry, bool, error)
-	DeleteRegistrationEntry(ctx context.Context, entryID string) (*common.RegistrationEntry, error)
+	DeleteRegistrationEntry(ctx context.Context, entryID string) (*common.RegistrationEntry, error) // TODO(tjons): it would be really nice if we didn't have to return from delete
 	FetchRegistrationEntry(ctx context.Context, entryID string) (*common.RegistrationEntry, error)
 	FetchRegistrationEntries(ctx context.Context, entryIDs []string) (map[string]*common.RegistrationEntry, error)
 	ListRegistrationEntries(context.Context, *ListRegistrationEntriesRequest) (*ListRegistrationEntriesResponse, error)

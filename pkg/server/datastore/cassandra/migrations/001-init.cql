@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS registered_entries (
     created_at timestamp,
     updated_at timestamp,
-    entry_id varchar,
+    entry_id varchar, --TODO(tjons): should this be UUID or timeuuid?
     spiffe_id varchar,
     parent_id varchar,
     ttl int,
@@ -16,16 +16,18 @@ CREATE TABLE IF NOT EXISTS registered_entries (
     selector_value varchar,
     dns_names set<text>,
     federated_trust_domains set<text>,
-    PRIMARY KEY (spiffe_id, parent_id, selector_type, selector_value)
+    PRIMARY KEY (entry_id) --TODO(tjons): fix primary key
 );
 
+--- TODO:(tjons) could we potentially use static columns and rework the partition key a bit?
 CREATE INDEX IF NOT EXISTS parent_id_idx ON registered_entries (parent_id) USING 'sai';
-CREATE INDEX IF NOT EXISTS entry_id_idx ON registered_entries (entry_id) USING 'sai';
+CREATE INDEX IF NOT EXISTS spiffe_id_idx ON registered_entries (spiffe_id) USING 'sai';
 CREATE INDEX IF NOT EXISTS hint_idx ON registered_entries (hint) USING 'sai';
 CREATE INDEX IF NOT EXISTS federated_trust_domain_idx ON registered_entries (federated_trust_domains) USING 'sai';
 CREATE INDEX IF NOT EXISTS downstream_idx ON registered_entries (downstream) USING 'sai';
 CREATE INDEX IF NOT EXISTS selector_type_idx ON registered_entries (selector_type) USING 'sai';
 CREATE INDEX IF NOT EXISTS selector_value_idx ON registered_entries (selector_value) USING 'sai';
+CREATE INDEX IF NOT EXISTS expiry_idx ON registered_entries (expiry) USING 'sai';
 
 
 --- TODO:(tjons) should this be collapsed with the above?
@@ -75,9 +77,10 @@ CREATE TABLE IF NOT EXISTS bundles (
     updated_at timestamp STATIC,
     trust_domain varchar,
     data blob STATIC, --- this is static because the bundle data is the same across all rows
-    federated_entry_spiffe_id varchar,
-    PRIMARY KEY (trust_domain, federated_entry_spiffe_id),
+    federated_entry_id varchar,
+    PRIMARY KEY (trust_domain, federated_entry_id),
 );
+CREATE INDEX IF NOT EXISTS federated_entry_id_idx ON bundles (federated_entry_id) USING 'sai';
 
 CREATE TABLE IF NOT EXISTS ca_journals (
     id int,

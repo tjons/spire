@@ -34,7 +34,7 @@ type cassandraDB struct {
 	cfg     *configuration
 	rwLock  *sync.Mutex
 	log     logrus.FieldLogger
-	session *gocql.Session
+	session *agocql.Session
 }
 
 type plugin struct {
@@ -113,9 +113,8 @@ func (p *plugin) openConnection(config *configuration) (err error) {
 		log: p.log,
 	}
 
-	clusterConfig := gocql.NewCluster(config.CassandraAddresses...)
+	clusterConfig := agocql.NewCluster(config.CassandraAddresses...)
 	clusterConfig.Keyspace = config.CassandraKeyspace
-	clusterConfig.Consistency = gocql.Quorum
 	db.session, err = clusterConfig.CreateSession()
 	if err != nil {
 		return err

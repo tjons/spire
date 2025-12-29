@@ -514,7 +514,7 @@ func (ds *Plugin) FetchRegistrationEntry(ctx context.Context,
 		return nil, err
 	}
 
-	// Return the last element in the list
+	// Return the last element in the list //TODO(tjons): incorrect comment
 	return entries[entryID], nil
 }
 
@@ -566,7 +566,7 @@ func (ds *Plugin) UpdateRegistrationEntry(ctx context.Context, e *common.Registr
 // DeleteRegistrationEntry deletes the given registration
 func (ds *Plugin) DeleteRegistrationEntry(ctx context.Context,
 	entryID string,
-) (registrationEntry *common.RegistrationEntry, err error) {
+) (registrationEntry *common.RegistrationEntry, err error) { // consider removing the return, there is no need to return it as it is not used anywhere
 	if err = ds.withWriteTx(ctx, func(tx *gorm.DB) (err error) {
 		registrationEntry, err = deleteRegistrationEntry(tx, entryID)
 		if err != nil {

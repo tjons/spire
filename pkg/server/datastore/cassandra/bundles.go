@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gocql/gocql"
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
+
 	"github.com/spiffe/spire/pkg/common/bundleutil"
 	"github.com/spiffe/spire/pkg/common/protoutil"
 	"github.com/spiffe/spire/pkg/server/datastore"
@@ -40,8 +41,8 @@ func (p *plugin) AppendBundle(ctx context.Context, b *common.Bundle) (*common.Bu
 		}
 
 		saveQ := `UPDATE bundles SET data = ?, updated_at = toTimestamp(now()) WHERE trust_domain = ?`
-		if err = p.db.session.QueryWithContext(
-			ctx, saveQ, newModel.Data, newModel.TrustDomain,
+		if err = p.db.session.Query(
+			saveQ, newModel.Data, newModel.TrustDomain,
 		).Exec(); err != nil {
 			return nil, newWrappedCassandraError(err)
 		}
@@ -55,7 +56,7 @@ func (p *plugin) CountBundles(ctx context.Context) (int32, error) {
 	countQ := `SELECT COUNT(*) FROM bundles`
 	var count int32
 
-	query := p.db.session.QueryWithContext(ctx, countQ)
+	query := p.db.session.Query(countQ)
 	if err := query.Scan(&count); err != nil {
 		return 0, newWrappedCassandraError(err)
 	}
@@ -254,11 +255,11 @@ func createBundle(s *gocql.Session, newBundle *common.Bundle) (*common.Bundle, e
 		return nil, err
 	}
 
-	// The Bundle will always have a row set with an empty federated_entry_spiffe_id.
+	// The Bundle will always have a row set with an empty federated_entry_id.
 	// This allows federation relationships to come and go without impacting the bundle data itself,
 	// and simplifies query patterns.
 	createQ := `
-	INSERT INTO bundles (created_at, updated_at, trust_domain, data, federated_entry_spiffe_id)
+	INSERT INTO bundles (created_at, updated_at, trust_domain, data, federated_entry_id)
 	VALUES (toTimestamp(now()), toTimestamp(now()), ?, ?, '') IF NOT EXISTS
 	`
 	query := s.Query(createQ, model.TrustDomain, model.Data)
