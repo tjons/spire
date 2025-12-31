@@ -2,9 +2,9 @@ package cassandra
 
 import (
 	"context"
+	"encoding/base64"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -17,6 +17,12 @@ import (
 	"github.com/spiffe/spire/proto/spire/common"
 	"google.golang.org/grpc/codes"
 )
+
+type selector struct {
+	Type  string
+	Value string
+	Order time.Time
+}
 
 type RegistrationEntry struct {
 	CreatedAt             time.Time
@@ -32,7 +38,7 @@ type RegistrationEntry struct {
 	StoreSVID             bool
 	Hint                  string
 	JWTSVIDTTL            int32
-	Selectors             []*common.Selector
+	Selectors             []*selector
 	DNSNames              []string
 	FederatedTrustDomains []string
 }
@@ -140,7 +146,6 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 	createEntryQuery := `
 		INSERT INTO registered_entries (
 			created_at,
-			updated_at,
 			entry_id,
 			spiffe_id,
 			parent_id,
@@ -155,8 +160,9 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 			dns_names,
 			federated_trust_domains,
 			selector_type,
-			selector_value
-		) VALUES (toTimestamp(now()), toTimestamp(now()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			selector_value,
+			updated_at
+		) VALUES (toTimestamp(now()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	// TODO(tjons): consistency level?
@@ -180,7 +186,7 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 
 	b := p.db.session.Batch(gocql.LoggedBatch)
 	for _, selector := range entry.Selectors {
-		b.Query(createEntryQuery, append(commonVals, selector.Type, selector.Value)...)
+		b.Query(createEntryQuery, append(commonVals, selector.Type, selector.Value, time.Now().Format(time.RFC3339Nano))...)
 	}
 
 	// TODO(tjons): context management?
@@ -189,7 +195,14 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 	}
 
 	newRegisteredEntry.CreatedAt = time.Now() // TODO(tjons): this feels hacky?
-	newRegisteredEntry.Selectors = entry.Selectors
+
+	for _, sl := range entry.Selectors {
+		newRegisteredEntry.Selectors = append(newRegisteredEntry.Selectors, &selector{
+			Type:  sl.Type,
+			Value: sl.Value,
+			Order: newRegisteredEntry.UpdatedAt,
+		})
+	}
 
 	return registrationEntryModelToProto(&newRegisteredEntry), nil
 }
@@ -209,7 +222,19 @@ func registrationEntryModelToProto(re *RegistrationEntry) *common.RegistrationEn
 		DnsNames:      re.DNSNames,
 		FederatesWith: re.FederatedTrustDomains,
 		CreatedAt:     re.CreatedAt.Unix(),
-		Selectors:     re.Selectors,
+	}
+
+	slices.SortStableFunc(re.Selectors, func(a, b *selector) int {
+		return a.Order.Compare(b.Order)
+	})
+
+	r.Selectors = make([]*common.Selector, len(re.Selectors))
+
+	for i, s := range re.Selectors {
+		r.Selectors[i] = &common.Selector{
+			Type:  s.Type,
+			Value: s.Value,
+		}
 	}
 
 	return r
@@ -353,7 +378,8 @@ func fetchRegistrationEntries(session *gocql.Session, entryIDs []string) (map[st
 			dns_names,
 			federated_trust_domains,
 			selector_type,
-			selector_value
+			selector_value,
+			writetime(dns_names) as wt
 		FROM registered_entries
 	`
 
@@ -376,47 +402,55 @@ func fetchRegistrationEntries(session *gocql.Session, entryIDs []string) (map[st
 	query.Consistency(gocql.LocalQuorum)
 
 	iter := query.Iter()
-	entryMap := make(map[string]*common.RegistrationEntry, iter.NumRows())
+	entryMap := make(map[string]*RegistrationEntry, iter.NumRows())
 	scanner := iter.Scanner()
 
 	// Since entries can have multiple selectors, we need to aggregate them
 
 	for scanner.Next() {
 		var (
-			result               = new(common.RegistrationEntry)
-			selector             = new(common.Selector)
+			result               = new(RegistrationEntry)
+			selector             = new(selector)
 			createdAt, updatedAt time.Time
+			ord                  string
 		)
 
 		err := scanner.Scan(
 			&createdAt,
 			&updatedAt,
-			&result.EntryId,
-			&result.SpiffeId,
-			&result.ParentId,
-			&result.X509SvidTtl,
+			&result.EntryID,
+			&result.SpiffeID,
+			&result.ParentID,
+			&result.TTL,
 			&result.Admin,
 			&result.Downstream,
-			&result.EntryExpiry,
+			&result.Expiry,
 			&result.RevisionNumber,
-			&result.StoreSvid,
+			&result.StoreSVID,
 			&result.Hint,
-			&result.JwtSvidTtl,
-			&result.DnsNames,
-			&result.FederatesWith,
+			&result.JWTSVIDTTL,
+			&result.DNSNames,
+			&result.FederatedTrustDomains,
 			&selector.Type,
 			&selector.Value,
+			&ord,
 		)
 		if err != nil {
 			return nil, newWrappedCassandraError(err)
 		}
 
-		if _, ok := entryMap[result.EntryId]; ok {
-			entryMap[result.EntryId].Selectors = append(entryMap[result.EntryId].Selectors, selector)
+		parsedOrd, err := time.Parse(time.RFC3339Nano, ord)
+		if err != nil {
+			return nil, newWrappedCassandraError(err)
+		}
+		selector.Order = parsedOrd
+
+		if _, ok := entryMap[result.EntryID]; ok {
+			entryMap[result.EntryID].Selectors = append(entryMap[result.EntryID].Selectors, selector)
 		} else {
-			result.CreatedAt = createdAt.Unix()
+			result.CreatedAt = createdAt
 			result.Selectors = append(result.Selectors, selector)
-			entryMap[result.EntryId] = result
+			entryMap[result.EntryID] = result
 		}
 	}
 
@@ -424,7 +458,12 @@ func fetchRegistrationEntries(session *gocql.Session, entryIDs []string) (map[st
 		return nil, newWrappedCassandraError(err)
 	}
 
-	return entryMap, nil
+	retval := make(map[string]*common.RegistrationEntry, len(entryMap))
+	for id, entry := range entryMap {
+		retval[id] = registrationEntryModelToProto(entry)
+	}
+
+	return retval, nil
 }
 
 func (p *plugin) FetchRegistrationEntries(ctx context.Context, entryIDs []string) (map[string]*common.RegistrationEntry, error) {
@@ -432,8 +471,19 @@ func (p *plugin) FetchRegistrationEntries(ctx context.Context, entryIDs []string
 }
 
 func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.ListRegistrationEntriesRequest) (*datastore.ListRegistrationEntriesResponse, error) {
-	if req.Pagination != nil && req.Pagination.PageSize == 0 {
-		return nil, status.Error(codes.InvalidArgument, "cannot paginate with pagesize = 0")
+	if req.Pagination != nil {
+		if req.Pagination.PageSize == 0 {
+			return nil, status.Error(codes.InvalidArgument, "cannot paginate with pagesize = 0")
+		}
+
+		if len(req.Pagination.Token) > 0 {
+
+			pToken, err := base64.URLEncoding.Strict().DecodeString(req.Pagination.Token)
+			if err != nil {
+				return nil, status.Errorf(codes.InvalidArgument, "could not parse token '%s'", req.Pagination.Token)
+			}
+			req.Pagination.Token = string(pToken) // TODO(tjons): clean this up and avoid the mutation
+		}
 	}
 	if req.BySelectors != nil && len(req.BySelectors.Selectors) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "cannot list by empty selector set")
@@ -498,7 +548,7 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 			selector_value
 		FROM registered_entries
 	`)
-	if len(fields) > 0 || (req.Pagination != nil && len(req.Pagination.Token) > 0) {
+	if len(fields) > 0 {
 		b.WriteString(" WHERE ")
 	}
 
@@ -514,53 +564,54 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 		}
 	}
 
-	if req.Pagination != nil && len(req.Pagination.Token) > 0 {
-		if len(fields) > 0 {
-			b.WriteString(" AND ")
-		}
-		b.WriteString("TOKEN(entry_id) > TOKEN(?)")
-		args = append(args, req.Pagination.Token)
-	}
-
-	if req.Pagination != nil && req.Pagination.PageSize > 0 {
-		b.WriteString(" LIMIT ")
-		b.WriteString(strconv.Itoa(int(req.Pagination.PageSize)))
-	}
-
 	b.WriteString(" ALLOW FILTERING")
 
 	query := b.String()
 	cqlQuery := p.db.session.Query(query, args...)
 	cqlQuery.Consistency(gocql.LocalQuorum)
+
+	if req.Pagination != nil {
+		cqlQuery.PageSize(int(req.Pagination.PageSize))
+
+		if len(req.Pagination.Token) > 0 {
+			cqlQuery = cqlQuery.PageState([]byte(req.Pagination.Token))
+		} else {
+			cqlQuery = cqlQuery.PageState(nil)
+		}
+	} else {
+		cqlQuery.PageSize(100_000_000) // effectively no limit
+	}
+
 	iter := cqlQuery.Iter()
-	entryMap := make(map[string]*common.RegistrationEntry, iter.NumRows())
+	entryMap := make(map[string]*RegistrationEntry, iter.NumRows())
 	scanner := iter.Scanner()
 
 	// Since entries can have multiple selectors, we need to aggregate them
 
 	for scanner.Next() {
 		var (
-			result               = new(common.RegistrationEntry)
-			selector             = new(common.Selector)
-			createdAt, updatedAt time.Time
+			result    = new(RegistrationEntry)
+			selector  = new(selector)
+			createdAt time.Time
+			updatedAt string
 		)
 
 		err := scanner.Scan(
 			&createdAt,
 			&updatedAt,
-			&result.EntryId,
-			&result.SpiffeId,
-			&result.ParentId,
-			&result.X509SvidTtl,
+			&result.EntryID,
+			&result.SpiffeID,
+			&result.ParentID,
+			&result.TTL,
 			&result.Admin,
 			&result.Downstream,
-			&result.EntryExpiry,
+			&result.Expiry,
 			&result.RevisionNumber,
-			&result.StoreSvid,
+			&result.StoreSVID,
 			&result.Hint,
-			&result.JwtSvidTtl,
-			&result.DnsNames,
-			&result.FederatesWith,
+			&result.JWTSVIDTTL,
+			&result.DNSNames,
+			&result.FederatedTrustDomains,
 			&selector.Type,
 			&selector.Value,
 		)
@@ -568,12 +619,18 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 			return nil, newWrappedCassandraError(err)
 		}
 
-		if _, ok := entryMap[result.EntryId]; ok {
-			entryMap[result.EntryId].Selectors = append(entryMap[result.EntryId].Selectors, selector)
+		updatedAtTime, err := time.Parse(time.RFC3339Nano, updatedAt)
+		if err != nil {
+			return nil, newWrappedCassandraError(err)
+		}
+		selector.Order = updatedAtTime
+
+		if _, ok := entryMap[result.EntryID]; ok {
+			entryMap[result.EntryID].Selectors = append(entryMap[result.EntryID].Selectors, selector)
 		} else {
-			result.CreatedAt = createdAt.Unix()
+			result.CreatedAt = createdAt
 			result.Selectors = append(result.Selectors, selector)
-			entryMap[result.EntryId] = result
+			entryMap[result.EntryID] = result
 		}
 	}
 
@@ -582,17 +639,18 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	}
 
 	r := &datastore.ListRegistrationEntriesResponse{
-		Entries: slices.Collect(maps.Values(entryMap)),
+		Entries: make([]*common.RegistrationEntry, 0, len(entryMap)),
+	}
+
+	for _, entry := range entryMap {
+		r.Entries = append(r.Entries, registrationEntryModelToProto(entry))
 	}
 
 	if req.Pagination != nil {
 		r.Pagination = &datastore.Pagination{
 			PageSize: req.Pagination.PageSize,
 		}
-		if len(r.Entries) == int(req.Pagination.PageSize) {
-			lastEntry := r.Entries[len(r.Entries)-1]
-			r.Pagination.Token = lastEntry.EntryId
-		}
+		r.Pagination.Token = base64.URLEncoding.Strict().EncodeToString(iter.PageState())
 	}
 
 	return r, nil
@@ -637,7 +695,7 @@ func (p *plugin) PruneRegistrationEntries(ctx context.Context, expiresBefore tim
 	b.Query(deletePruneQuery, delIds)
 	b.Query(deleteFederatedQuery, delIds)
 
-	if err := p.db.session.ExecuteBatch(b); err != nil {
+	if err := b.Exec(); err != nil {
 		return newWrappedCassandraError(err)
 	}
 

@@ -342,3 +342,4 @@ require (
 )
 
 replace github.com/gocql/gocql => github.com/scylladb/gocql v1.16.0
+replace github.com/apache/cassandra-gocql-driver/v2 => ../cassandra-gocql-driver

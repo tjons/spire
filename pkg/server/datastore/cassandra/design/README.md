@@ -53,6 +53,22 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 - [ ] TestPruneRegistrationEntries()
 - [x] TestFetchInexistentRegistrationEntry()
 - [ ] TestListRegistrationEntries()
+  - [x] with_partial_page_with_pagination
+  - [x] with_partial_page_without_pagination
+  - [x] with_full_page_with_pagination_read-only
+  - [x] with_partial_page_with_pagination_read-only
+  - [x] with_full_page_with_pagination
+  - [x] with_full_page_without_pagination
+  - [x] with_full_page_with_pagination_read-only
+  - [x] with_full_page_without_pagination_read-only
+  - [x] with_page_and_a_half_with_pagination
+  - [x] with_page_and_a_half_without_pagination
+  - [x] with_page_and_a_half_with_pagination_read-only
+  - [x] with_page_and_a_half_without_pagination_read-only
+  - [ ] by_parent_ID_with_pagination
+  - [x] by_parent_ID_without_pagination
+  - [ ] by_parent_ID_with_pagination_read-only
+  - [x] by_parent_ID_without_pagination_read-only
 - [ ] TestUpdateRegistrationEntry()
 - [ ] TestUpdateRegistrationEntryWithStoreSvid()
 - [ ] TestUpdateRegistrationEntryWithMask()

@@ -1,23 +1,25 @@
 CREATE TABLE IF NOT EXISTS registered_entries (
     created_at timestamp,
-    updated_at timestamp,
-    entry_id varchar, --TODO(tjons): should this be UUID or timeuuid?
-    spiffe_id varchar,
-    parent_id varchar,
+    updated_at text, -- store this as a varchar for some sorting fun later
+    entry_id text, --TODO(tjons): should this be UUID or timeuuid?
+    spiffe_id text,
+    parent_id text,
     ttl int,
     admin boolean,
     downstream boolean,
     expiry bigint,
     revision_number bigint,
     store_svid boolean,
-    hint varchar,
+    hint text,
     jwt_svid_ttl int,
-    selector_type varchar,
-    selector_value varchar,
+    selector_types list<text>,
+    selector_values list<text>,
     dns_names set<text>,
     federated_trust_domains set<text>,
-    PRIMARY KEY (entry_id) --TODO(tjons): fix primary key
+    PRIMARY KEY (entry_id, selector_type, selector_value) --TODO(tjons): fix primary key
 );
+
+--- TODO(tjons): I think this is actually going to require us to collapse the rows by partition
 
 --- TODO:(tjons) could we potentially use static columns and rework the partition key a bit?
 CREATE INDEX IF NOT EXISTS parent_id_idx ON registered_entries (parent_id) USING 'sai';
@@ -90,16 +92,6 @@ CREATE TABLE IF NOT EXISTS ca_journals (
     active_x509_authority_id varchar,
     active_jwt_authority_id varchar,
     PRIMARY KEY (id)
-);
-
---- TODO(tjons): this should _absolutely_ be folded into the registered_entries table
-CREATE TABLE IF NOT EXISTS dns_names (
-    id int,
-    created_at timestamp,
-    updated_at timestamp,
-    registered_entry_id int,
-    value varchar,
-    PRIMARY KEY(registered_entry_id, value)
 );
 
 CREATE TABLE IF NOT EXISTS federated_trust_domains (
