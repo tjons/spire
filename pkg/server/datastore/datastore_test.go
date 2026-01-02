@@ -2617,7 +2617,6 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 			expectEntriesOut:      []*common.RegistrationEntry{foobarAB1, foobarCB2},
 			expectPagedTokensIn:   []string{"", "1", "3"},
 			expectPagedEntriesOut: [][]*common.RegistrationEntry{{foobarAB1}, {foobarCB2}, {}},
-			focus:                 true,
 		},
 		// by SPIFFE ID
 		{
@@ -3107,9 +3106,9 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 		},
 	} {
 		for _, withPagination := range []bool{true, false} {
-			if !tt.focus {
-				continue
-			}
+			// if !tt.focus {
+			// 	continue
+			// }
 			name := tt.test
 			if withPagination {
 				name += " with pagination"
@@ -3120,9 +3119,9 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 				name += " read-only"
 			}
 
-			if name != "by parent ID with pagination" {
-				continue
-			}
+			// if name != "by parent ID with pagination" {
+			// 	continue
+			// }
 			s.T().Run(name, func(t *testing.T) {
 				s.ds = s.newPlugin()
 				defer s.ds.Close()

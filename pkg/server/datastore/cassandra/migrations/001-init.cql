@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS registered_entries (
     created_at timestamp,
-    updated_at text, -- store this as a varchar for some sorting fun later
-    entry_id text, --TODO(tjons): should this be UUID or timeuuid?
+    updated_at timestamp,
+    entry_id text,
     spiffe_id text,
     parent_id text,
     ttl int,
@@ -16,19 +16,19 @@ CREATE TABLE IF NOT EXISTS registered_entries (
     selector_values list<text>,
     dns_names set<text>,
     federated_trust_domains set<text>,
-    PRIMARY KEY (entry_id, selector_type, selector_value) --TODO(tjons): fix primary key
+    federated_trust_domains_m map<int, text>,
+    PRIMARY KEY (entry_id)
 );
+--- TODO(tjons) whats the default sort order on disk of the above table? I fear we need
+--- to sort these by creation time... ugh
 
---- TODO(tjons): I think this is actually going to require us to collapse the rows by partition
-
---- TODO:(tjons) could we potentially use static columns and rework the partition key a bit?
 CREATE INDEX IF NOT EXISTS parent_id_idx ON registered_entries (parent_id) USING 'sai';
 CREATE INDEX IF NOT EXISTS spiffe_id_idx ON registered_entries (spiffe_id) USING 'sai';
 CREATE INDEX IF NOT EXISTS hint_idx ON registered_entries (hint) USING 'sai';
 CREATE INDEX IF NOT EXISTS federated_trust_domain_idx ON registered_entries (federated_trust_domains) USING 'sai';
 CREATE INDEX IF NOT EXISTS downstream_idx ON registered_entries (downstream) USING 'sai';
-CREATE INDEX IF NOT EXISTS selector_type_idx ON registered_entries (selector_type) USING 'sai';
-CREATE INDEX IF NOT EXISTS selector_value_idx ON registered_entries (selector_value) USING 'sai';
+CREATE INDEX IF NOT EXISTS selector_types_idx ON registered_entries (selector_types) USING 'sai';
+CREATE INDEX IF NOT EXISTS selector_values_idx ON registered_entries (selector_values) USING 'sai';
 CREATE INDEX IF NOT EXISTS expiry_idx ON registered_entries (expiry) USING 'sai';
 
 

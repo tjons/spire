@@ -21,7 +21,6 @@ import (
 type selector struct {
 	Type  string
 	Value string
-	Order time.Time
 }
 
 type RegistrationEntry struct {
@@ -146,6 +145,7 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 	createEntryQuery := `
 		INSERT INTO registered_entries (
 			created_at,
+			updated_at,
 			entry_id,
 			spiffe_id,
 			parent_id,
@@ -159,14 +159,21 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 			jwt_svid_ttl,
 			dns_names,
 			federated_trust_domains,
-			selector_type,
-			selector_value,
-			updated_at
-		) VALUES (toTimestamp(now()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			selector_types,
+			selector_values
+		) VALUES (toTimestamp(now()), toTimestamp(now()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	// TODO(tjons): consistency level?
 	// is read consistency cheaper than write consistency?
+
+	selectorTypes := make([]string, 0, len(entry.Selectors))
+	selectorValues := make([]string, 0, len(entry.Selectors))
+
+	for _, sl := range entry.Selectors {
+		selectorTypes = append(selectorTypes, sl.Type)
+		selectorValues = append(selectorValues, sl.Value)
+	}
 
 	commonVals := []any{
 		newRegisteredEntry.EntryID,
@@ -182,15 +189,11 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 		newRegisteredEntry.JWTSVIDTTL,
 		newRegisteredEntry.DNSNames,
 		newRegisteredEntry.FederatedTrustDomains,
+		selectorTypes,
+		selectorValues,
 	}
 
-	b := p.db.session.Batch(gocql.LoggedBatch)
-	for _, selector := range entry.Selectors {
-		b.Query(createEntryQuery, append(commonVals, selector.Type, selector.Value, time.Now().Format(time.RFC3339Nano))...)
-	}
-
-	// TODO(tjons): context management?
-	if err := b.Exec(); err != nil {
+	if err := p.db.session.Query(createEntryQuery, commonVals...).Exec(); err != nil {
 		return nil, newWrappedCassandraError(err)
 	}
 
@@ -200,7 +203,6 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 		newRegisteredEntry.Selectors = append(newRegisteredEntry.Selectors, &selector{
 			Type:  sl.Type,
 			Value: sl.Value,
-			Order: newRegisteredEntry.UpdatedAt,
 		})
 	}
 
@@ -223,10 +225,6 @@ func registrationEntryModelToProto(re *RegistrationEntry) *common.RegistrationEn
 		FederatesWith: re.FederatedTrustDomains,
 		CreatedAt:     re.CreatedAt.Unix(),
 	}
-
-	slices.SortStableFunc(re.Selectors, func(a, b *selector) int {
-		return a.Order.Compare(b.Order)
-	})
 
 	r.Selectors = make([]*common.Selector, len(re.Selectors))
 
@@ -377,9 +375,8 @@ func fetchRegistrationEntries(session *gocql.Session, entryIDs []string) (map[st
 			jwt_svid_ttl,
 			dns_names,
 			federated_trust_domains,
-			selector_type,
-			selector_value,
-			writetime(dns_names) as wt
+			selector_types,
+			selector_values
 		FROM registered_entries
 	`
 
@@ -409,15 +406,13 @@ func fetchRegistrationEntries(session *gocql.Session, entryIDs []string) (map[st
 
 	for scanner.Next() {
 		var (
-			result               = new(RegistrationEntry)
-			selector             = new(selector)
-			createdAt, updatedAt time.Time
-			ord                  string
+			result                        = new(RegistrationEntry)
+			selectorTypes, selectorValues []string
 		)
 
 		err := scanner.Scan(
-			&createdAt,
-			&updatedAt,
+			&result.CreatedAt,
+			&result.UpdatedAt,
 			&result.EntryID,
 			&result.SpiffeID,
 			&result.ParentID,
@@ -431,27 +426,22 @@ func fetchRegistrationEntries(session *gocql.Session, entryIDs []string) (map[st
 			&result.JWTSVIDTTL,
 			&result.DNSNames,
 			&result.FederatedTrustDomains,
-			&selector.Type,
-			&selector.Value,
-			&ord,
+			&selectorTypes,
+			&selectorValues,
 		)
 		if err != nil {
 			return nil, newWrappedCassandraError(err)
 		}
 
-		parsedOrd, err := time.Parse(time.RFC3339Nano, ord)
-		if err != nil {
-			return nil, newWrappedCassandraError(err)
+		for i := range selectorTypes {
+			sel := &selector{
+				Type:  selectorTypes[i],
+				Value: selectorValues[i],
+			}
+			result.Selectors = append(result.Selectors, sel)
 		}
-		selector.Order = parsedOrd
 
-		if _, ok := entryMap[result.EntryID]; ok {
-			entryMap[result.EntryID].Selectors = append(entryMap[result.EntryID].Selectors, selector)
-		} else {
-			result.CreatedAt = createdAt
-			result.Selectors = append(result.Selectors, selector)
-			entryMap[result.EntryID] = result
-		}
+		entryMap[result.EntryID] = result
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -511,6 +501,40 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	}
 
 	if req.ByFederatesWith != nil && len(req.ByFederatesWith.TrustDomains) > 0 {
+		switch req.ByFederatesWith.Match {
+		case datastore.Exact:
+			for _, td := range req.ByFederatesWith.TrustDomains {
+				args = append(args, td)
+				fields = append(fields, "federated_trust_domains")
+				operators = append(operators, "=")
+			}
+			// Strict equality.. could be achievable with a CONTAINS + length check?
+		case datastore.MatchAny:
+			// Contains OR Contains
+			// tjons: we can accomplish this with something that looks like WHERE federated_trust_domains
+		case datastore.Subset:
+			// Contains OR Contains ??
+
+			// "self-built index" could be a set containing combinations of the various values, something
+			// where
+			// ['td1', 'td2', 'td3', 'td4'] would become:
+			// [
+			//  'td1', 'td1td2', 'td1td3', 'td1td4', 'td1td3td4', 'td1td2td4',td1td2td3', 'td1td2td3td4',
+			//  'td2', 'td2td3', 'td2td4',
+			//  'td3', 'td3td4',
+			//  'td4',
+			// ]
+		case datastore.Superset:
+			// Contains AND Contains
+
+			// we need to redesign this table so that we have multiple forms of the data
+			// so we ca query it in different ways, I think that we can do this without making it
+			// multirow etc by using maps + lists, or maps + sets, or implementing our own arrays on
+			// maps by setting key to writetime or index value and then using the value to actually
+			// store the map values.
+			//
+			// this is a good case for why we need a query lib etc.
+		}
 		args = append(args, req.ByFederatesWith.TrustDomains)
 		fields = append(fields, "federated_trust_domains")
 		operators = append(operators, "CONTAINS")
@@ -544,8 +568,8 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 			jwt_svid_ttl,
 			dns_names,
 			federated_trust_domains,
-			selector_type,
-			selector_value
+			selector_types,
+			selector_values
 		FROM registered_entries
 	`)
 	if len(fields) > 0 {
@@ -586,19 +610,15 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	entryMap := make(map[string]*RegistrationEntry, iter.NumRows())
 	scanner := iter.Scanner()
 
-	// Since entries can have multiple selectors, we need to aggregate them
-
 	for scanner.Next() {
 		var (
-			result    = new(RegistrationEntry)
-			selector  = new(selector)
-			createdAt time.Time
-			updatedAt string
+			result                        = new(RegistrationEntry)
+			selectorTypes, selectorValues []string
 		)
 
 		err := scanner.Scan(
-			&createdAt,
-			&updatedAt,
+			&result.CreatedAt,
+			&result.UpdatedAt,
 			&result.EntryID,
 			&result.SpiffeID,
 			&result.ParentID,
@@ -612,26 +632,22 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 			&result.JWTSVIDTTL,
 			&result.DNSNames,
 			&result.FederatedTrustDomains,
-			&selector.Type,
-			&selector.Value,
+			&selectorTypes,
+			&selectorValues,
 		)
 		if err != nil {
 			return nil, newWrappedCassandraError(err)
 		}
 
-		updatedAtTime, err := time.Parse(time.RFC3339Nano, updatedAt)
-		if err != nil {
-			return nil, newWrappedCassandraError(err)
-		}
-		selector.Order = updatedAtTime
-
-		if _, ok := entryMap[result.EntryID]; ok {
-			entryMap[result.EntryID].Selectors = append(entryMap[result.EntryID].Selectors, selector)
-		} else {
-			result.CreatedAt = createdAt
+		for i := range selectorTypes {
+			selector := &selector{
+				Type:  selectorTypes[i],
+				Value: selectorValues[i],
+			}
 			result.Selectors = append(result.Selectors, selector)
-			entryMap[result.EntryID] = result
 		}
+
+		entryMap[result.EntryID] = result
 	}
 
 	if err := scanner.Err(); err != nil {
