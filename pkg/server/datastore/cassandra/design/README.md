@@ -29,6 +29,7 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 - configurable topology strategy
 - allow running test suite after failure
 - teardown
+- handling the new Validate() process without introducing package dependency issues
 
 ## Test suite progress
 

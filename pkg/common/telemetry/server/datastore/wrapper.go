@@ -32,6 +32,10 @@ func (w metricsWrapper) Configure(ctx context.Context, hclConfiguration string) 
 	return w.ds.Configure(ctx, hclConfiguration)
 }
 
+func (w metricsWrapper) Validate(ctx context.Context, hclConfiguration string) error {
+	return w.ds.Validate(ctx, hclConfiguration)
+}
+
 func (w metricsWrapper) AppendBundle(ctx context.Context, bundle *common.Bundle) (_ *common.Bundle, err error) {
 	callCounter := StartAppendBundleCall(w.m)
 	defer callCounter.Done(&err)

@@ -60,6 +60,10 @@ func (s *DataStore) Configure(ctx context.Context, hclConfiguration string) erro
 	return nil // This is intentionally a no-op for the fake datastore
 }
 
+func (s *DataStore) Validate(ctx context.Context, hclConfiguration string) error {
+	return nil // This is intentionally a no-op for the fake datastore
+}
+
 func (s *DataStore) Close() error {
 	return s.ds.Close()
 }

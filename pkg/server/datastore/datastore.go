@@ -91,6 +91,8 @@ type DataStore interface {
 	// TODO(tjons): figure out what to do with these
 	Close() error
 	Configure(_ context.Context, hclConfiguration string) error
+
+	Validate(ctx context.Context, configuration string) error
 }
 
 // DataConsistency indicates the required data consistency for a read operation.

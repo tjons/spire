@@ -53,6 +53,10 @@ func New(log logrus.FieldLogger) datastore.DataStore {
 	}
 }
 
+func (p *plugin) Validate(ctx context.Context, configuration string) error {
+	return nil
+}
+
 func (p *plugin) Close() error {
 	return nil
 }

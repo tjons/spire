@@ -24,9 +24,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
-	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
 	"github.com/spiffe/spire/pkg/common/bundleutil"
-	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/protoutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/common/x509util"
@@ -869,23 +867,27 @@ func (ds *Plugin) Configure(ctx context.Context, hclConfiguration string) error 
 	return ds.openConnections(ctx, config)
 }
 
-func (ds *Plugin) Validate(ctx context.Context, coreConfig catalog.CoreConfig, configuration string) (*configv1.ValidateResponse, error) {
-	config, err := buildConfig(configuration)
-	if err != nil {
-		return &configv1.ValidateResponse{
-			Notes: []string{err.Error()},
-		}, err
-	}
-	err = config.Validate()
-	if err != nil {
-		return &configv1.ValidateResponse{
-			Notes: []string{err.Error()},
-		}, err
-	}
+// func (ds *Plugin) Validate(ctx context.Context, configuration string) (*configv1.ValidateResponse, error) {
+// 	config, err := buildConfig(configuration)
+// 	if err != nil {
+// 		return &configv1.ValidateResponse{
+// 			Notes: []string{err.Error()},
+// 		}, err
+// 	}
+// 	err = config.Validate()
+// 	if err != nil {
+// 		return &configv1.ValidateResponse{
+// 			Notes: []string{err.Error()},
+// 		}, err
+// 	}
 
-	return &configv1.ValidateResponse{
-		Valid: true,
-	}, nil
+// 	return &configv1.ValidateResponse{
+// 		Valid: true,
+// 	}, nil
+// }
+
+func (ds *Plugin) Validate(ctx context.Context, hclConfiguration string) error {
+	return nil
 }
 
 func buildConfig(hclConfiguration string) (*configuration, error) {

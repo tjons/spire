@@ -94,7 +94,7 @@ type Repository struct {
 }
 
 type dsConfigurer struct {
-	ds *ds_sql.Plugin
+	ds datastore.DataStore // TODO(tjons): restore later
 }
 
 func (c *dsConfigurer) Configure(ctx context.Context, _ catalog.CoreConfig, configuration string) error {
@@ -102,7 +102,8 @@ func (c *dsConfigurer) Configure(ctx context.Context, _ catalog.CoreConfig, conf
 }
 
 func (c *dsConfigurer) Validate(ctx context.Context, coreConfig catalog.CoreConfig, configuration string) (*configv1.ValidateResponse, error) {
-	return c.ds.Validate(ctx, coreConfig, configuration)
+	return &configv1.ValidateResponse{Valid: true}, nil
+	//return c.ds.Validate(ctx, coreConfig, configuration) // TODO(tjons): temp change, restore this later
 }
 
 func (repo *Repository) Plugins() map[string]catalog.PluginRepo {
@@ -236,13 +237,14 @@ func ValidateConfig(ctx context.Context, config Config) (pluginNotes map[string]
 		}
 
 		ds := ds_sql.New(config.Log)
-		resp, err := ds.Validate(ctx, coreConfig, dsConfigString)
+		err = ds.Validate(ctx, dsConfigString) // TODO(tjons): temp change, restore this later
 		if err != nil {
 			pluginNotes[datastorePluginId] = append(pluginNotes[datastorePluginId], err.Error())
 		}
-		if resp != nil && len(resp.Notes) != 0 {
-			pluginNotes[datastorePluginId] = append(pluginNotes[datastorePluginId], resp.Notes...)
-		}
+		// if resp != nil && len(resp.Notes) != 0 {
+		// 	pluginNotes[datastorePluginId] = append(pluginNotes[datastorePluginId], resp.Notes...)
+		// }
+		// TODO(tjons): restore this later
 
 		repo.dsCloser = ds
 	}
@@ -266,7 +268,6 @@ func ValidateConfig(ctx context.Context, config Config) (pluginNotes map[string]
 }
 
 func loadSQLDataStore(ctx context.Context, config Config, coreConfig catalog.CoreConfig, datastoreConfigs catalog.PluginConfigs) (*ds_sql.Plugin, error) {
-func loadSQLDataStore(ctx context.Context, config Config, coreConfig catalog.CoreConfig, datastoreConfigs catalog.PluginConfigs) (datastore.DataStore, error) {
 	switch {
 	case len(datastoreConfigs) == 0:
 		return nil, errors.New("expecting a DataStore plugin")
@@ -327,11 +328,8 @@ func loadPluggableDatastore(ctx context.Context, config Config, coreConfig catal
 		return nil, err
 	}
 
-	configurer := catalog.ConfigurerFunc(func(ctx context.Context, _ catalog.CoreConfig, configuration string) error {
-		return ds.Configure(ctx, configuration)
-	})
-
-	if _, err := catalog.ConfigurePlugin(ctx, coreConfig, configurer, singleDatastore.DataSource, ""); err != nil {
+	dsConf := &dsConfigurer{ds: ds}
+	if _, err := catalog.ConfigurePlugin(ctx, coreConfig, dsConf, singleDatastore.DataSource, ""); err != nil {
 		return nil, err
 	}
 
