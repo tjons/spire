@@ -633,7 +633,7 @@ func (ds *Plugin) FetchRegistrationEntryEvent(ctx context.Context, eventID uint)
 }
 
 // CreateJoinToken takes a Token message and stores it
-func (ds *Plugin) CreateJoinToken(ctx context.Context, token *datastore.JoinToken) (err error) {
+func (ds *Plugin) CreateJoinToken(ctx context.Context, token *datastore.JoinToken) error { // (tjons): updated these bc no need to name retval
 	if token == nil || token.Token == "" || token.Expiry.IsZero() {
 		return errors.New("token and expiry are required")
 	}
@@ -658,7 +658,7 @@ func (ds *Plugin) FetchJoinToken(ctx context.Context, token string) (resp *datas
 }
 
 // DeleteJoinToken deletes the given join token
-func (ds *Plugin) DeleteJoinToken(ctx context.Context, token string) (err error) {
+func (ds *Plugin) DeleteJoinToken(ctx context.Context, token string) error {
 	return ds.withWriteTx(ctx, func(tx *gorm.DB) (err error) {
 		err = deleteJoinToken(tx, token)
 		return err
@@ -667,7 +667,7 @@ func (ds *Plugin) DeleteJoinToken(ctx context.Context, token string) (err error)
 
 // PruneJoinTokens takes a Token message, and deletes all tokens which have expired
 // before the date in the message
-func (ds *Plugin) PruneJoinTokens(ctx context.Context, expiry time.Time) (err error) {
+func (ds *Plugin) PruneJoinTokens(ctx context.Context, expiry time.Time) error {
 	return ds.withWriteTx(ctx, func(tx *gorm.DB) (err error) {
 		err = pruneJoinTokens(tx, expiry)
 		return err

@@ -322,18 +322,18 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 - [ ] TestUpdateFederationRelationship()
 
 #### Area: X509CA
-- [ ] TestTaintX509CA()
-- [ ] TestRevokeX509CA()
+- [x] TestTaintX509CA()
+- [x] TestRevokeX509CA()
 
 #### Area: JWTKey
-- [ ] TestTaintJWTKey()
-- [ ] TestRevokeJWTKey()
+- [x] TestTaintJWTKey()
+- [x] TestRevokeJWTKey()
 
 #### Area: Join Token
-- [ ] TestCreateJoinToken()
-- [ ] TestCreateAndFetchJoinToken()
-- [ ] TestDeleteJoinToken()
-- [ ] TestPruneJoinTokens()
+- [x] TestCreateJoinToken()
+- [x] TestCreateAndFetchJoinToken()
+- [x] TestDeleteJoinToken()
+- [x] TestPruneJoinTokens()
 
 #### Area: Nodes
 - [ ] TestCreateAttestedNode()

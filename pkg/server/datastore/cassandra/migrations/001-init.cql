@@ -107,13 +107,11 @@ CREATE TABLE IF NOT EXISTS federated_trust_domains (
 );
 
 CREATE TABLE IF NOT EXISTS join_tokens (
-    id int,
-    created_at timestamp,
-    updated_at timestamp,
     join_token varchar,
     expiry bigint,
     PRIMARY KEY (join_token)
 );
+CREATE INDEX IF NOT EXISTS expiry_idx ON join_tokens (expiry) USING 'sai';
 
 CREATE TABLE IF NOT EXISTS node_resolver_map_entries (
     id int,
