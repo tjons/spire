@@ -23,6 +23,19 @@ type metricsWrapper struct {
 	m  telemetry.Metrics
 }
 
+// Added temporarily to satisfy the datastore interface
+func (w metricsWrapper) Close() error {
+	return w.ds.Close()
+}
+
+func (w metricsWrapper) Configure(ctx context.Context, hclConfiguration string) error {
+	return w.ds.Configure(ctx, hclConfiguration)
+}
+
+func (w metricsWrapper) Validate(ctx context.Context, hclConfiguration string) error {
+	return w.ds.Validate(ctx, hclConfiguration)
+}
+
 func (w metricsWrapper) AppendBundle(ctx context.Context, bundle *common.Bundle) (_ *common.Bundle, err error) {
 	callCounter := StartAppendBundleCall(w.m)
 	defer callCounter.Done(&err)

@@ -1,5 +1,6 @@
 package sqlstore
 
+// TODO(tjons): fix missing Require() calls that allow silent failures
 import (
 	"context"
 	"crypto/x509"

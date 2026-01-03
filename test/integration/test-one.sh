@@ -37,6 +37,7 @@ export ROOTDIR
 export REPODIR
 export RUNDIR
 export TESTNAME
+export TESTFILTER=$2
 
 export SUCCESS=
 

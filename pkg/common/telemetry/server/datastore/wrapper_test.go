@@ -332,6 +332,18 @@ type fakeDataStore struct {
 	err error
 }
 
+func (ds *fakeDataStore) Close() error {
+	return nil
+}
+
+func (ds *fakeDataStore) Configure(ctx context.Context, hclConfiguration string) error {
+	return nil // This is intentionally a no-op for the fake datastore
+}
+
+func (ds *fakeDataStore) Validate(ctx context.Context, hclConfiguration string) error {
+	return nil // This is intentionally a no-op for the fake datastore
+}
+
 func (ds *fakeDataStore) SetError(err error) {
 	ds.err = err
 }

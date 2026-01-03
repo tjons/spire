@@ -1,0 +1,357 @@
+# Cassandra datastore implementation
+
+This is a proof-of-concept implementation of Apache Cassandra as a backing datastore for SPIRE server. 
+
+## Cassandra Schema
+
+
+
+## Implemented
+- Alternative datastore configuration loading via experimental settings.
+- Interface type for the cassandra implementation and restructuring of the existing plugin where necessary
+- Basic scaffolding of methods without implementation
+- Decoupling of test harness from sqlstore package to allow multiple DataStore implementations to pass a common battery of tests
+- `*-pluggable` versions of existing datastore tests for MySQL and Postgres against the DataStore interface integration tests
+- Validation of replication for postgres in pluggable mode
+- Validation of MySQL without replication in pluggable mode
+- Validation of MySQL with replication in pluggable mode
+- Cassandra tests with pluggable mode
+- Isolatable debuggable tests
+- Bundles
+
+## To Be Implemented
+- Pagination
+- sqlite tests in pluggable integration test mode
+- Bundle federation relationship and deletion interactions
+- general approach to consistency
+  - need to audit all calls for appropriate consistency
+- use gocql, not scylladb 
+- replace migrations
+- configurable topology strategy
+- allow running test suite after failure
+- teardown
+- handling the new Validate() process without introducing package dependency issues
+
+## Test suite progress
+
+#### Area: Bundles
+- [x] TestBundleCRUD()
+- [x] TestCountBundles()
+- [x] TestBundlePrune()
+- [x] TestSetBundle()
+- [ ] TestListBundlesWithPagination()
+- [ ] TestDeleteBundleRestrictedByRegistrationEntries()
+- [ ] TestDeleteBundleDeleteRegistrationEntries()
+- [ ] TestDeleteBundleDissociateRegistrationEntries()
+
+#### Area: RegistrationEntry
+- [x] TestCountRegistrationEntries()
+- [x] TestCreateRegistrationEntry()
+- [ ] TestCreateOrReturnRegistrationEntry()
+- [x] TestCreateInvalidRegistrationEntry()
+- [x] TestFetchRegistrationEntry()
+- [x] TestFetchRegistrationEntryDoesNotExist()
+- [x] TestFetchRegistrationEntries()
+- [ ] TestPruneRegistrationEntries()
+- [x] TestFetchInexistentRegistrationEntry()
+- [ ] TestListRegistrationEntries()
+  - [x] without_entries_with_pagination 
+  - [x] without_entries_without_pagination 
+  - [x] with_partial_page_with_pagination 
+  - [x] with_partial_page_without_pagination 
+  - [x] with_full_page_with_pagination 
+  - [x] with_full_page_without_pagination 
+  - [x] with_page_and_a_half_with_pagination 
+  - [x] with_page_and_a_half_without_pagination 
+  - [x] by_parent_ID_with_pagination 
+  - [x] by_parent_ID_without_pagination 
+  - [x] by_SPIFFE_ID_with_pagination 
+  - [x] by_SPIFFE_ID_without_pagination 
+  - [x] by_Hint,_two_matches_with_pagination 
+  - [x] by_Hint,_two_matches_without_pagination 
+  - [x] by_Hint,_no_match_with_pagination 
+  - [x] by_Hint,_no_match_without_pagination 
+  - [ ] by_federatesWith_one_subset_with_pagination 
+  - [ ] by_federatesWith_one_subset_without_pagination 
+  - [ ] by_federatesWith_many_subset_with_pagination 
+  - [ ] by_federatesWith_many_subset_without_pagination 
+  - [ ] by_federatesWith_one_exact_with_pagination 
+  - [ ] by_federatesWith_one_exact_without_pagination 
+  - [ ] by_federatesWith_many_exact_with_pagination 
+  - [ ] by_federatesWith_many_exact_without_pagination 
+  - [ ] by_federatesWith_one_match_any_with_pagination 
+  - [ ] by_federatesWith_one_match_any_without_pagination 
+  - [ ] by_federatesWith_many_match_any_with_pagination 
+  - [ ] by_federatesWith_many_match_any_without_pagination 
+  - [ ] by_federatesWith_one_superset_with_pagination 
+  - [ ] by_federatesWith_one_superset_without_pagination 
+  - [ ] by_federatesWith_many_superset_with_pagination 
+  - [ ] by_federatesWith_many_superset_without_pagination 
+  - [x] by_parent_ID_and_SPIFFE_ID_with_pagination 
+  - [x] by_parent_ID_and_SPIFFE_ID_without_pagination 
+  - [ ] by_parent_ID_and_exact_selector_with_pagination 
+  - [ ] by_parent_ID_and_exact_selector_without_pagination 
+  - [ ] by_parent_ID_and_exact_selectors_with_pagination 
+  - [ ] by_parent_ID_and_exact_selectors_without_pagination 
+  - [ ] by_parent_ID_and_subset_selector_with_pagination 
+  - [ ] by_parent_ID_and_subset_selector_without_pagination 
+  - [x] by_parent_ID_and_subset_selectors_with_pagination 
+  - [x] by_parent_ID_and_subset_selectors_without_pagination 
+  - [ ] by_parent_ID_and_subset_selectors_no_match_with_pagination 
+  - [ ] by_parent_ID_and_subset_selectors_no_match_without_pagination 
+  - [ ] by_parent_ID_and_match_any_selector_with_pagination 
+  - [ ] by_parent_ID_and_match_any_selector_without_pagination 
+  - [ ] by_parent_ID_and_match_any_selectors_with_pagination 
+  - [ ] by_parent_ID_and_match_any_selectors_without_pagination 
+  - [ ] by_parent_ID_and_match_any_selectors_no_match_with_pagination 
+  - [ ] by_parent_ID_and_match_any_selectors_no_match_without_pagination 
+  - [ ] by_parent_ID_and_superset_selector_with_pagination 
+  - [ ] by_parent_ID_and_superset_selector_without_pagination 
+  - [ ] by_parent_ID_and_superset_selectors_with_pagination 
+  - [ ] by_parent_ID_and_superset_selectors_without_pagination 
+  - [ ] by_parent_ID_and_superset_selectors_no_match_with_pagination 
+  - [ ] by_parent_ID_and_superset_selectors_no_match_without_pagination 
+  - [ ] by_parentID_and_federatesWith_one_subset_with_pagination 
+  - [ ] by_parentID_and_federatesWith_one_subset_without_pagination 
+  - [ ] by_parentID_and_federatesWith_many_subset_with_pagination 
+  - [ ] by_parentID_and_federatesWith_many_subset_without_pagination 
+  - [ ] by_parentID_and_federatesWith_one_exact_with_pagination 
+  - [ ] by_parentID_and_federatesWith_one_exact_without_pagination 
+  - [ ] by_parentID_and_federatesWith_many_exact_with_pagination 
+  - [ ] by_parentID_and_federatesWith_many_exact_without_pagination 
+  - [ ] by_parentID_and_federatesWith_one_match_any_with_pagination 
+  - [ ] by_parentID_and_federatesWith_one_match_any_without_pagination 
+  - [ ] by_parentID_and_federatesWith_many_match_any_with_pagination 
+  - [ ] by_parentID_and_federatesWith_many_match_any_without_pagination 
+  - [ ] by_parentID_and_federatesWith_one_superset_with_pagination 
+  - [ ] by_parentID_and_federatesWith_one_superset_without_pagination 
+  - [ ] by_parentID_and_federatesWith_many_superset_with_pagination 
+  - [ ] by_parentID_and_federatesWith_many_superset_without_pagination 
+  - [ ] by_SPIFFE_ID_and_exact_selector_with_pagination 
+  - [ ] by_SPIFFE_ID_and_exact_selector_without_pagination 
+  - [ ] by_SPIFFE_ID_and_exact_selectors_with_pagination 
+  - [ ] by_SPIFFE_ID_and_exact_selectors_without_pagination 
+  - [ ] by_SPIFFE_ID_and_subset_selector_with_pagination 
+  - [ ] by_SPIFFE_ID_and_subset_selector_without_pagination 
+  - [ ] by_SPIFFE_ID_and_subset_selectors_with_pagination 
+  - [ ] by_SPIFFE_ID_and_subset_selectors_without_pagination 
+  - [ ] by_SPIFFE_ID_and_subset_selectors_no_match_with_pagination 
+  - [ ] by_SPIFFE_ID_and_subset_selectors_no_match_without_pagination 
+  - [ ] by_SPIFFE_ID_and_match_any_selector_with_pagination 
+  - [ ] by_SPIFFE_ID_and_match_any_selector_without_pagination 
+  - [x] by_SPIFFE_ID_and_match_any_selectors_with_pagination 
+  - [x] by_SPIFFE_ID_and_match_any_selectors_without_pagination 
+  - [ ] by_SPIFFE_ID_and_match_any_selectors_no_match_with_pagination 
+  - [ ] by_SPIFFE_ID_and_match_any_selectors_no_match_without_pagination 
+  - [x] by_SPIFFE_ID_and_superset_selector_with_pagination 
+  - [x] by_SPIFFE_ID_and_superset_selector_without_pagination 
+  - [ ] by_SPIFFE_ID_and_superset_selectors_with_pagination 
+  - [ ] by_SPIFFE_ID_and_superset_selectors_without_pagination 
+  - [ ] by_SPIFFE_ID_and_superset_selectors_no_match_with_pagination 
+  - [ ] by_SPIFFE_ID_and_superset_selectors_no_match_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_one_subset_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_one_subset_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_subset_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_subset_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_one_exact_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_one_exact_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_exact_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_exact_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_subset_no_results_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_subset_no_results_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_match_any_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_match_any_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_match_any_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_match_any_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_match_any_no_results_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_match_any_no_results_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_superset_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_superset_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_superset_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_superset_without_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_superset_no_results_with_pagination 
+  - [ ] by_SPIFFE_ID_and_federatesWith_superset_no_results_without_pagination 
+  - [ ] by_Parent_ID,_federatesWith_and_selectors_with_pagination 
+  - [ ] by_Parent_ID,_federatesWith_and_selectors_without_pagination 
+  - [x] without_entries_with_pagination_read-only 
+  - [x] without_entries_without_pagination_read-only 
+  - [x] with_partial_page_with_pagination_read-only 
+  - [x] with_partial_page_without_pagination_read-only 
+  - [x] with_full_page_with_pagination_read-only 
+  - [x] with_full_page_without_pagination_read-only 
+  - [x] with_page_and_a_half_with_pagination_read-only 
+  - [x] with_page_and_a_half_without_pagination_read-only 
+  - [x] by_parent_ID_with_pagination_read-only 
+  - [x] by_parent_ID_without_pagination_read-only 
+  - [x] by_SPIFFE_ID_with_pagination_read-only 
+  - [x] by_SPIFFE_ID_without_pagination_read-only 
+  - [x] by_Hint,_two_matches_with_pagination_read-only 
+  - [x] by_Hint,_two_matches_without_pagination_read-only 
+  - [x] by_Hint,_no_match_with_pagination_read-only 
+  - [x] by_Hint,_no_match_without_pagination_read-only 
+  - [ ] by_federatesWith_one_subset_with_pagination_read-only 
+  - [ ] by_federatesWith_one_subset_without_pagination_read-only 
+  - [ ] by_federatesWith_many_subset_with_pagination_read-only 
+  - [ ] by_federatesWith_many_subset_without_pagination_read-only 
+  - [ ] by_federatesWith_one_exact_with_pagination_read-only 
+  - [ ] by_federatesWith_one_exact_without_pagination_read-only 
+  - [ ] by_federatesWith_many_exact_with_pagination_read-only 
+  - [ ] by_federatesWith_many_exact_without_pagination_read-only 
+  - [ ] by_federatesWith_one_match_any_with_pagination_read-only 
+  - [ ] by_federatesWith_one_match_any_without_pagination_read-only 
+  - [ ] by_federatesWith_many_match_any_with_pagination_read-only 
+  - [ ] by_federatesWith_many_match_any_without_pagination_read-only 
+  - [ ] by_federatesWith_one_superset_with_pagination_read-only 
+  - [ ] by_federatesWith_one_superset_without_pagination_read-only 
+  - [ ] by_federatesWith_many_superset_with_pagination_read-only 
+  - [ ] by_federatesWith_many_superset_without_pagination_read-only 
+  - [x] by_parent_ID_and_SPIFFE_ID_with_pagination_read-only 
+  - [x] by_parent_ID_and_SPIFFE_ID_without_pagination_read-only 
+  - [ ] by_parent_ID_and_exact_selector_with_pagination_read-only 
+  - [ ] by_parent_ID_and_exact_selector_without_pagination_read-only 
+  - [ ] by_parent_ID_and_exact_selectors_with_pagination_read-only 
+  - [ ] by_parent_ID_and_exact_selectors_without_pagination_read-only 
+  - [ ] by_parent_ID_and_subset_selector_with_pagination_read-only 
+  - [ ] by_parent_ID_and_subset_selector_without_pagination_read-only 
+  - [x] by_parent_ID_and_subset_selectors_with_pagination_read-only 
+  - [x] by_parent_ID_and_subset_selectors_without_pagination_read-only 
+  - [ ] by_parent_ID_and_subset_selectors_no_match_with_pagination_read-only 
+  - [ ] by_parent_ID_and_subset_selectors_no_match_without_pagination_read-only 
+  - [ ] by_parent_ID_and_match_any_selector_with_pagination_read-only 
+  - [ ] by_parent_ID_and_match_any_selector_without_pagination_read-only 
+  - [ ] by_parent_ID_and_match_any_selectors_with_pagination_read-only 
+  - [ ] by_parent_ID_and_match_any_selectors_without_pagination_read-only 
+  - [ ] by_parent_ID_and_match_any_selectors_no_match_with_pagination_read-only 
+  - [ ] by_parent_ID_and_match_any_selectors_no_match_without_pagination_read-only 
+  - [ ] by_parent_ID_and_superset_selector_with_pagination_read-only 
+  - [ ] by_parent_ID_and_superset_selector_without_pagination_read-only 
+  - [ ] by_parent_ID_and_superset_selectors_with_pagination_read-only 
+  - [ ] by_parent_ID_and_superset_selectors_without_pagination_read-only 
+  - [ ] by_parent_ID_and_superset_selectors_no_match_with_pagination_read-only 
+  - [ ] by_parent_ID_and_superset_selectors_no_match_without_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_one_subset_with_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_one_subset_without_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_many_subset_with_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_many_subset_without_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_one_exact_with_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_one_exact_without_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_many_exact_with_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_many_exact_without_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_one_match_any_with_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_one_match_any_without_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_many_match_any_with_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_many_match_any_without_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_one_superset_with_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_one_superset_without_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_many_superset_with_pagination_read-only 
+  - [ ] by_parentID_and_federatesWith_many_superset_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_exact_selector_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_exact_selector_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_exact_selectors_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_exact_selectors_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_subset_selector_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_subset_selector_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_subset_selectors_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_subset_selectors_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_subset_selectors_no_match_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_subset_selectors_no_match_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_match_any_selector_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_match_any_selector_without_pagination_read-only 
+  - [x] by_SPIFFE_ID_and_match_any_selectors_with_pagination_read-only 
+  - [x] by_SPIFFE_ID_and_match_any_selectors_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_match_any_selectors_no_match_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_match_any_selectors_no_match_without_pagination_read-only 
+  - [x] by_SPIFFE_ID_and_superset_selector_with_pagination_read-only 
+  - [x] by_SPIFFE_ID_and_superset_selector_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_superset_selectors_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_superset_selectors_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_superset_selectors_no_match_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_superset_selectors_no_match_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_one_subset_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_one_subset_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_subset_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_subset_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_one_exact_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_one_exact_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_exact_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_exact_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_subset_no_results_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_subset_no_results_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_match_any_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_match_any_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_match_any_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_match_any_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_match_any_no_results_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_match_any_no_results_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_superset_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_superset_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_superset_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_many_superset_without_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_superset_no_results_with_pagination_read-only 
+  - [ ] by_SPIFFE_ID_and_federatesWith_superset_no_results_without_pagination_read-only 
+  - [ ] by_Parent_ID,_federatesWith_and_selectors_with_pagination_read-only 
+  - [ ] by_Parent_ID,_federatesWith_and_selectors_without_pagination_read-only 
+- [ ] TestUpdateRegistrationEntry()
+- [ ] TestUpdateRegistrationEntryWithStoreSvid()
+- [ ] TestUpdateRegistrationEntryWithMask()
+- [ ] TestDeleteRegistrationEntry()
+- [ ] TestListParentIDEntries()
+- [ ] TestListSelectorEntries()
+- [ ] TestListEntriesBySelectorSubset()
+- [ ] TestListSelectorEntriesSuperset()
+- [ ] TestListEntriesBySelectorMatchAny()
+- [ ] TestListEntriesByFederatesWithExact()
+- [ ] TestListEntriesByFederatesWithSubset()
+- [ ] TestListEntriesByFederatesWithMatchAny()
+- [ ] TestListEntriesByFederatesWithSuperset()
+- [ ] TestRegistrationEntriesFederatesWithAgainstMissingBundle()
+- [ ] TestRegistrationEntriesFederatesWithSuccess()
+- [ ] TestListRegistrationEntryEvents()
+- [ ] TestPruneRegistrationEntryEvents()
+
+#### Area: CA Journal
+- [x] TestSetCAJournal()
+- [x] TestFetchCAJournal()
+- [x] TestPruneCAJournal()
+
+#### Area: Federation Relationships
+- [ ] TestDeleteFederationRelationship()
+- [ ] TestFetchFederationRelationship()
+- [ ] TestCreateFederationRelationship()
+- [ ] TestListFederationRelationships()
+- [ ] TestUpdateFederationRelationship()
+
+#### Area: X509CA
+- [x] TestTaintX509CA()
+- [x] TestRevokeX509CA()
+
+#### Area: JWTKey
+- [x] TestTaintJWTKey()
+- [x] TestRevokeJWTKey()
+
+#### Area: Join Token
+- [x] TestCreateJoinToken()
+- [x] TestCreateAndFetchJoinToken()
+- [x] TestDeleteJoinToken()
+- [x] TestPruneJoinTokens()
+
+#### Area: Nodes
+- [ ] TestCreateAttestedNode()
+- [ ] TestFetchAttestedNodeMissing()
+- [ ] TestListAttestedNodes()
+- [ ] TestUpdateAttestedNode()
+- [ ] TestPruneAttestedExpiredNodes()
+- [ ] TestDeleteAttestedNode()
+- [ ] TestListAttestedNodeEvents()
+- [ ] TestPruneAttestedNodeEvents()
+- [ ] TestNodeSelectors()
+- [ ] TestListNodeSelectors()
+- [ ] TestSetNodeSelectorsUnderLoad()
+- [ ] TestCountAttestedNodes()
+
+#### Area: Configuration/General
+- [ ] TestInvalidPluginConfiguration()
+- [ ] TestInvalidAWSConfiguration()
+- [ ] TestInvalidMySQLConfiguration()
+- [ ] TestRace()
+
