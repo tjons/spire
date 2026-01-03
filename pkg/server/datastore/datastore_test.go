@@ -5375,7 +5375,7 @@ func (s *PluginSuite) TestSetCAJournal() {
 		{
 			name: "try to update a non existing CA journal",
 			code: codes.NotFound,
-			msg:  "datastore-sql: record not found",
+			msg:  _notFoundErrMsg,
 			caJournal: &datastore.CAJournal{
 				ID:                    999,
 				Data:                  []byte("test data"),

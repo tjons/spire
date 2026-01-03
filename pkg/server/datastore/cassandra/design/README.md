@@ -24,6 +24,7 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 - sqlite tests in pluggable integration test mode
 - Bundle federation relationship and deletion interactions
 - general approach to consistency
+  - need to audit all calls for appropriate consistency
 - use gocql, not scylladb 
 - replace migrations
 - configurable topology strategy
@@ -309,9 +310,9 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 - [ ] TestPruneRegistrationEntryEvents()
 
 #### Area: CA Journal
-- [ ] TestSetCAJournal()
-- [ ] TestFetchCAJournal()
-- [ ] TestPruneCAJournal()
+- [x] TestSetCAJournal()
+- [x] TestFetchCAJournal()
+- [x] TestPruneCAJournal()
 
 #### Area: Federation Relationships
 - [ ] TestDeleteFederationRelationship()

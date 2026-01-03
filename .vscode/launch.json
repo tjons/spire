@@ -44,7 +44,8 @@
                 // "^(TestBundleCRUD|TestCreateRegistrationEntry)$",
                 // "^(TestBundleCRUD|TestCountBundles|TestBundlePrune|TestSetBundle|TestListBundlesWithPagination)$",
                 // "^(TestBundleCRUD|TestCountBundles|TestBundlePrune|TestSetBundle)$",
-                "^(TestListRegistrationEntries)$"
+                // "^(TestListRegistrationEntries)$"
+                "^(TestSetCAJournal|TestFetchCAJournal|TestPruneCAJournal)$"
             ],
             "preLaunchTask":"start cassandra",
             "postDebugTask": "stop cassandra",

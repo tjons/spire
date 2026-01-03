@@ -4689,7 +4689,7 @@ func modelToJoinToken(model JoinToken) *datastore.JoinToken {
 func modelToCAJournal(model CAJournal) *datastore.CAJournal {
 	return &datastore.CAJournal{
 		ID:                    model.ID,
-		Data:                  model.Data,
+		Data:                  model.Data, // TODO(tjons): why is this not unmarshalled here?
 		ActiveX509AuthorityID: model.ActiveX509AuthorityID,
 	}
 }

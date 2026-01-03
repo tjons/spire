@@ -90,9 +90,9 @@ CREATE TABLE IF NOT EXISTS ca_journals (
     updated_at timestamp,
     data blob,
     active_x509_authority_id varchar,
-    active_jwt_authority_id varchar,
     PRIMARY KEY (id)
 );
+CREATE INDEX IF NOT EXISTS ca_journals_active_idx ON ca_journals (active_x509_authority_id) USING 'sai';
 
 CREATE TABLE IF NOT EXISTS federated_trust_domains (
     id int,
