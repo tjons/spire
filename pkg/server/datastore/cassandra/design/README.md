@@ -315,11 +315,11 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 - [x] TestPruneCAJournal()
 
 #### Area: Federation Relationships
-- [ ] TestDeleteFederationRelationship()
-- [ ] TestFetchFederationRelationship()
-- [ ] TestCreateFederationRelationship()
+- [x] TestDeleteFederationRelationship()
+- [x] TestFetchFederationRelationship()
+- [x] TestCreateFederationRelationship()
 - [ ] TestListFederationRelationships()
-- [ ] TestUpdateFederationRelationship()
+- [x] TestUpdateFederationRelationship()
 
 #### Area: X509CA
 - [x] TestTaintX509CA()

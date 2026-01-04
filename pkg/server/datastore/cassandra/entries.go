@@ -299,7 +299,7 @@ func validateRegistrationEntry(entry *common.RegistrationEntry) error {
 	return nil
 }
 
-func (p *plugin) CreateOrReturnRegistrationEntry(context.Context, *common.RegistrationEntry) (*common.RegistrationEntry, bool, error) {
+func (p *plugin) CreateOrReturnRegistrationEntry(ctx context.Context, re *common.RegistrationEntry) (*common.RegistrationEntry, bool, error) {
 	return nil, false, NotImplementedErr
 }
 

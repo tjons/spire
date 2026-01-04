@@ -45,7 +45,8 @@
                 // "^(TestBundleCRUD|TestCountBundles|TestBundlePrune|TestSetBundle|TestListBundlesWithPagination)$",
                 // "^(TestBundleCRUD|TestCountBundles|TestBundlePrune|TestSetBundle)$",
                 // "^(TestListRegistrationEntries)$"
-                "^(TestCreateJoinToken|TestCreateAndFetchJoinToken|TestDeleteJoinToken|TestPruneJoinTokens)$"
+                // "^(TestDeleteFederationRelationship|TestFetchFederationRelationship|TestCreateFederationRelationship|TestListFederationRelationships|TestUpdateFederationRelationship)$"
+                "^(TestCreateOrReturnRegistrationEntry)$"
             ],
             "preLaunchTask":"start cassandra",
             "postDebugTask": "stop cassandra",

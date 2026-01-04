@@ -95,14 +95,13 @@ CREATE TABLE IF NOT EXISTS ca_journals (
 CREATE INDEX IF NOT EXISTS ca_journals_active_idx ON ca_journals (active_x509_authority_id) USING 'sai';
 
 CREATE TABLE IF NOT EXISTS federated_trust_domains (
-    id int,
     created_at timestamp,
     updated_at timestamp,
     trust_domain varchar,
     bundle_endpoint_url varchar,
     bundle_endpoint_profile varchar,
     endpoint_spiffe_id varchar,
-    implicit boolean,
+    -- implicit boolean, --- pretty sure this can be dropped in upstream sqlstore
     PRIMARY KEY (trust_domain)
 );
 

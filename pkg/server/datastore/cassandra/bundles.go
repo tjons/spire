@@ -112,7 +112,7 @@ func fetchBundle(s *gocql.Session, trustDomainID string) (*common.Bundle, error)
 	if err := query.Scan(&data); err != nil {
 		if errors.Is(err, gocql.ErrNotFound) {
 			// The existing datastore implementation does not return an error when no results are found
-			return nil, status.Error(codes.NotFound, NotFoundErr.Error())
+			return nil, nil
 		}
 
 		return nil, fmt.Errorf("Error scanning from bundles: %w", err)

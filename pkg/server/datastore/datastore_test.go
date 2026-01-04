@@ -4636,7 +4636,7 @@ func (s *PluginSuite) TestDeleteFederationRelationship() {
 		{
 			name:        "deleting an unexistent federation relationship returns not found",
 			trustDomain: spiffeid.RequireTrustDomainFromString("non-existent-td.org"),
-			expErr:      "rpc error: code = NotFound desc = datastore-sql: record not found",
+			expErr:      fmt.Sprintf("rpc error: code = NotFound desc = %s", _notFoundErrMsg),
 		},
 		{
 			name:   "deleting a federation relationship using an empty trust domain fails nicely",
