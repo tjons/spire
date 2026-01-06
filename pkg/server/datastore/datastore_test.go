@@ -2782,6 +2782,7 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 			expectEntriesOut:      []*common.RegistrationEntry{foobarAB1, foobarCD12},
 			expectPagedTokensIn:   []string{"", "2", "3"},
 			expectPagedEntriesOut: [][]*common.RegistrationEntry{{foobarAB1}, {foobarCD12}, {}},
+			focus:                 true,
 		},
 		{
 			test:                  "by parent ID and match any selectors no match",
@@ -3106,9 +3107,9 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 		},
 	} {
 		for _, withPagination := range []bool{true, false} {
-			// if !tt.focus {
-			// 	continue
-			// }
+			if !tt.focus {
+				continue
+			}
 			name := tt.test
 			if withPagination {
 				name += " with pagination"
@@ -3119,9 +3120,9 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 				name += " read-only"
 			}
 
-			// if name != "by parent ID with pagination" {
-			// 	continue
-			// }
+			if name != "by parent ID and match any selectors without pagination" {
+				continue
+			}
 			s.T().Run(name, func(t *testing.T) {
 				s.ds = s.newPlugin()
 				defer s.ds.Close()

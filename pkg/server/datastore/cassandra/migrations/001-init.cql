@@ -14,10 +14,12 @@ CREATE TABLE IF NOT EXISTS registered_entries (
     jwt_svid_ttl int,
     selector_types list<text>,
     selector_values list<text>,
+    unrolled_selector_type_val text,
+    unrolled_ftd text,
     dns_names set<text>,
     federated_trust_domains set<text>,
-    federated_trust_domains_m map<int, text>,
-    PRIMARY KEY (entry_id)
+    index_terms set<text>,
+    PRIMARY KEY (entry_id, unrolled_selector_type_val, unrolled_ftd)
 );
 --- TODO(tjons) whats the default sort order on disk of the above table? I fear we need
 --- to sort these by creation time... ugh
@@ -27,10 +29,12 @@ CREATE INDEX IF NOT EXISTS spiffe_id_idx ON registered_entries (spiffe_id) USING
 CREATE INDEX IF NOT EXISTS hint_idx ON registered_entries (hint) USING 'sai';
 CREATE INDEX IF NOT EXISTS federated_trust_domain_idx ON registered_entries (federated_trust_domains) USING 'sai';
 CREATE INDEX IF NOT EXISTS downstream_idx ON registered_entries (downstream) USING 'sai';
-CREATE INDEX IF NOT EXISTS selector_types_idx ON registered_entries (selector_types) USING 'sai';
+CREATE INDEX IF NOT EXISTS selector_types ON registered_entries (selector_types) USING 'sai';
 CREATE INDEX IF NOT EXISTS selector_values_idx ON registered_entries (selector_values) USING 'sai';
 CREATE INDEX IF NOT EXISTS expiry_idx ON registered_entries (expiry) USING 'sai';
-
+CREATE INDEX IF NOT EXISTS indices_idx ON registered_entries (index_terms) USING 'sai';
+CREATE INDEX IF NOT EXISTS unrolled_ftd_idx ON registered_entries (unrolled_ftd) USING 'sai';
+CREATE INDEX IF NOT EXISTS unrolled_selector_type_val_idx ON registered_entries (unrolled_selector_type_val) USING 'sai';
 
 --- TODO:(tjons) should this be collapsed with the above?
 CREATE TABLE IF NOT EXISTS registered_entries_events (
@@ -39,17 +43,6 @@ CREATE TABLE IF NOT EXISTS registered_entries_events (
     updated_at timestamp,
     entry_id varchar,
     PRIMARY KEY((id), entry_id)
-);
-
---- TODO(tjons): this should _almost certainly_ be collapsed with the above
-CREATE TABLE IF NOT EXISTS selectors (
-    id int,
-    created_at timestamp,
-    updated_at timestamp,
-    registered_entry_id int,
-    type varchar,
-    value varchar,
-    PRIMARY KEY((registered_entry_id, type, value))
 );
 
 CREATE TABLE IF NOT EXISTS attested_node_entries (
@@ -63,6 +56,8 @@ CREATE TABLE IF NOT EXISTS attested_node_entries (
     new_serial_number varchar,
     new_expires_at timestamp,
     can_reattest boolean,
+    selector_type varchar,
+    selector_value varchar,
     PRIMARY KEY (spiffe_id)
 );
 

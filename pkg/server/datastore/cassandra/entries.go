@@ -3,6 +3,7 @@ package cassandra
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -142,6 +143,10 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 		DNSNames:              entry.DnsNames,
 	}
 
+	b := p.db.session.Batch(gocql.LoggedBatch)
+
+	indexes := buildIndexesForRegistrationEntry(entry)
+
 	createEntryQuery := `
 		INSERT INTO registered_entries (
 			created_at,
@@ -160,8 +165,11 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 			dns_names,
 			federated_trust_domains,
 			selector_types,
-			selector_values
-		) VALUES (toTimestamp(now()), toTimestamp(now()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			selector_values,
+			index_terms,
+			unrolled_selector_type_val,
+			unrolled_ftd
+		) VALUES (toTimestamp(now()), toTimestamp(now()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	// TODO(tjons): consistency level?
@@ -191,9 +199,33 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 		newRegisteredEntry.FederatedTrustDomains,
 		selectorTypes,
 		selectorValues,
+		indexes,
 	}
 
-	if err := p.db.session.Query(createEntryQuery, commonVals...).Exec(); err != nil {
+	b.Entries = []gocql.BatchEntry{
+		{
+			Stmt: createEntryQuery,
+			Args: append(commonVals, "", ""),
+		},
+	}
+
+	for _, sl := range entry.Selectors {
+		selVal := sl.Type + "|" + sl.Value
+
+		b.Entries = append(b.Entries, gocql.BatchEntry{
+			Stmt: createEntryQuery,
+			Args: append(commonVals, selVal, ""),
+		})
+	}
+
+	for _, ftd := range entry.FederatesWith {
+		b.Entries = append(b.Entries, gocql.BatchEntry{
+			Stmt: createEntryQuery,
+			Args: append(commonVals, "", ftd),
+		})
+	}
+
+	if err := b.ExecContext(ctx); err != nil {
 		return nil, newWrappedCassandraError(err)
 	}
 
@@ -460,6 +492,12 @@ func (p *plugin) FetchRegistrationEntries(ctx context.Context, entryIDs []string
 	return fetchRegistrationEntries(p.db.session, entryIDs)
 }
 
+type queryTerm struct {
+	field    string
+	operator string
+	values   any
+}
+
 func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.ListRegistrationEntriesRequest) (*datastore.ListRegistrationEntriesResponse, error) {
 	if req.Pagination != nil {
 		if req.Pagination.PageSize == 0 {
@@ -482,7 +520,7 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	args := []any{}
 	fields := []string{}
 	operators := []string{}
-	if len(req.ByParentID) > 0 {
+	if len(req.ByParentID) > 0 { // I THINK I CAN DO THIS WITH CONTAINS MAYBE ??
 		args = append(args, req.ByParentID)
 		fields = append(fields, "parent_id")
 		operators = append(operators, "=")
@@ -500,54 +538,19 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 		operators = append(operators, "=")
 	}
 
-	if req.ByFederatesWith != nil && len(req.ByFederatesWith.TrustDomains) > 0 {
-		switch req.ByFederatesWith.Match {
-		case datastore.Exact:
-			for _, td := range req.ByFederatesWith.TrustDomains {
-				args = append(args, td)
-				fields = append(fields, "federated_trust_domains")
-				operators = append(operators, "=")
-			}
-			// Strict equality.. could be achievable with a CONTAINS + length check?
-		case datastore.MatchAny:
-			// Contains OR Contains
-			// tjons: we can accomplish this with something that looks like WHERE federated_trust_domains
-		case datastore.Subset:
-			// Contains OR Contains ??
-
-			// "self-built index" could be a set containing combinations of the various values, something
-			// where
-			// ['td1', 'td2', 'td3', 'td4'] would become:
-			// [
-			//  'td1', 'td1td2', 'td1td3', 'td1td4', 'td1td3td4', 'td1td2td4',td1td2td3', 'td1td2td3td4',
-			//  'td2', 'td2td3', 'td2td4',
-			//  'td3', 'td3td4',
-			//  'td4',
-			// ]
-		case datastore.Superset:
-			// Contains AND Contains
-
-			// we need to redesign this table so that we have multiple forms of the data
-			// so we ca query it in different ways, I think that we can do this without making it
-			// multirow etc by using maps + lists, or maps + sets, or implementing our own arrays on
-			// maps by setting key to writetime or index value and then using the value to actually
-			// store the map values.
-			//
-			// this is a good case for why we need a query lib etc.
+	if req.ByFederatesWith != nil || req.BySelectors != nil {
+		indexes := generateSearchIndexForRequest(req)
+		if len(indexes) == 3 {
+			fields = append(fields, indexes[0])
+			operators = append(operators, indexes[1])
+			args = append(args, indexes[2])
 		}
-		args = append(args, req.ByFederatesWith.TrustDomains)
-		fields = append(fields, "federated_trust_domains")
-		operators = append(operators, "CONTAINS")
 	}
 
 	if len(req.ByHint) > 0 {
 		args = append(args, req.ByHint)
 		fields = append(fields, "hint")
 		operators = append(operators, "=")
-	}
-
-	if req.BySelectors != nil {
-
 	}
 
 	b := strings.Builder{}
@@ -670,6 +673,230 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	}
 
 	return r, nil
+}
+
+func generateSearchIndexForRequest(req *datastore.ListRegistrationEntriesRequest) [3]string {
+	if req.BySelectors != nil {
+		switch req.BySelectors.Match {
+		case datastore.Exact:
+			return [3]string{
+				"index_terms",
+				"CONTAINS",
+				buildSelectorMatchExactIndex(req.BySelectors.Selectors),
+			}
+		case datastore.Subset:
+		case datastore.MatchAny:
+			vals := []string{}
+			for _, sl := range req.BySelectors.Selectors {
+				b := strings.Builder{}
+				b.WriteByte('\'')
+				b.WriteString(sl.Type)
+				b.WriteString("|")
+				b.WriteString(sl.Value)
+				b.WriteByte('\'')
+				vals = append(vals, b.String())
+			}
+
+			return [3]string{
+				"unrolled_selector_type_val",
+				"IN",
+				// TODO(tjons): fix the security issue here
+				fmt.Sprintf("(%s)", strings.Join(vals, ", ")),
+			}
+		case datastore.Superset:
+			// return buildSelectorSupersetMatchIndexes(req.BySelectors.Selectors)
+		}
+	}
+
+	if req.ByFederatesWith != nil {
+		switch req.ByFederatesWith.Match {
+		case datastore.Exact:
+			return [3]string{
+				"index_terms",
+				"CONTAINS",
+				buildFtdExactIndex(req.ByFederatesWith.TrustDomains),
+			}
+		case datastore.Subset:
+		case datastore.MatchAny:
+			// return buildFtdAnyMatchIndexes(req.ByFederatesWith.TrustDomains)
+		case datastore.Superset:
+			// return buildFtdSupersetMatchIndexes(req.ByFederatesWith.TrustDomains)
+		}
+	}
+
+	return [3]string{}
+}
+
+const ftdIndexPrefix = "ftd_"
+const multipartIndexPrefix = "mpidx__"
+
+func buildIndexesForRegistrationEntry(re *common.RegistrationEntry) (indexes []string) {
+	var sls, tds []string
+	if len(re.GetSelectors()) > 0 {
+		sls = buildSelectorIndexes(re.GetSelectors())
+	}
+
+	if len(re.GetFederatesWith()) > 0 {
+		tds = buildFtdIndexes(re.GetFederatesWith())
+	}
+
+	for _, s := range sls {
+		for _, t := range tds {
+			b := strings.Builder{}
+			b.WriteString(multipartIndexPrefix)
+			b.WriteString(s)
+			b.WriteString("___")
+			b.WriteString(t)
+
+			indexes = append(indexes, b.String())
+		}
+	}
+
+	return
+}
+
+func buildFtdIndexes(trustDomains []string) (indexes []string) {
+	indexes = append(indexes, buildFtdAnyMatchIndexes(trustDomains)...)
+	indexes = append(indexes, buildFtdExactIndex(trustDomains))
+	indexes = append(indexes, buildFtdSupersetMatchIndexes(trustDomains)...)
+
+	return
+}
+
+func buildFtdExactIndex(trustDomains []string) string {
+	b := strings.Builder{}
+	b.WriteString(ftdIndexPrefix)
+	b.WriteString(matcherExactInfix)
+	for i, td := range trustDomains {
+		if i > 0 {
+			b.WriteString("__")
+		}
+		b.WriteString("td_")
+		b.WriteString(td)
+	}
+
+	return b.String()
+}
+
+func buildFtdAnyMatchIndexes(trustDomains []string) []string {
+	indexes := make([]string, 0, len(trustDomains))
+
+	for _, td := range trustDomains {
+		b := strings.Builder{}
+		b.WriteString(ftdIndexPrefix)
+		b.WriteString(matcherAnyInfix)
+		b.WriteString("td_")
+		b.WriteString(td)
+
+		indexes = append(indexes, b.String())
+	}
+
+	return indexes
+}
+
+func buildFtdSupersetMatchIndexes(trustDomains []string) []string {
+	indexes := make([]string, 0, len(trustDomains))
+	allIdx := strings.Builder{}
+	allIdx.WriteString(ftdIndexPrefix)
+	allIdx.WriteString(matcherSupersetInfix)
+
+	for i, td := range trustDomains {
+		if i > 0 {
+			allIdx.WriteString("__")
+		}
+
+		b := strings.Builder{}
+		b.WriteString(ftdIndexPrefix)
+		b.WriteString(matcherSupersetInfix)
+		b.WriteString("td_")
+		b.WriteString(td)
+
+		allIdx.WriteString("td_")
+		allIdx.WriteString(td)
+
+		indexes = append(indexes, b.String())
+	}
+
+	return append(indexes, allIdx.String())
+}
+
+func buildSelectorIndexes(selectors []*common.Selector) (indexes []string) {
+	indexes = append(indexes, buildSelectorAnyMatchIndexes(selectors)...)
+	indexes = append(indexes, buildSelectorMatchExactIndex(selectors))
+	indexes = append(indexes, buildSelectorSupersetMatchIndexes(selectors)...)
+
+	return
+}
+
+const selectorMatchPrefix = "stv_"
+const matcherAnyInfix = "match_any_"
+const matcherExactInfix = "match_exact_"
+const matcherSupersetInfix = "match_superset_"
+
+func buildSelectorAnyMatchIndexes(selectors []*common.Selector) []string {
+	indexes := make([]string, 0, len(selectors))
+
+	for _, s := range selectors {
+		b := strings.Builder{}
+		b.WriteString(selectorMatchPrefix)
+		b.WriteString(matcherAnyInfix)
+		b.WriteString("type_")
+		b.WriteString(s.Type)
+		b.WriteString("_value_")
+		b.WriteString(s.Value)
+
+		indexes = append(indexes, b.String())
+	}
+
+	return indexes
+}
+
+func buildSelectorMatchExactIndex(selectors []*common.Selector) string {
+	b := strings.Builder{}
+	b.WriteString(selectorMatchPrefix)
+	b.WriteString(matcherExactInfix)
+
+	for i, s := range selectors {
+		if i > 0 {
+			b.WriteString("__")
+		}
+		b.WriteString("type_")
+		b.WriteString(s.Type)
+		b.WriteString("_value_")
+		b.WriteString(s.Value)
+	}
+
+	return b.String()
+}
+
+func buildSelectorSupersetMatchIndexes(selectors []*common.Selector) []string {
+	indexes := make([]string, 0, len(selectors))
+	allIdx := strings.Builder{}
+	allIdx.WriteString(selectorMatchPrefix)
+	allIdx.WriteString(matcherSupersetInfix)
+
+	for i, s := range selectors {
+		if i > 0 {
+			allIdx.WriteString("_")
+		}
+
+		b := strings.Builder{}
+		b.WriteString(selectorMatchPrefix)
+		b.WriteString(matcherSupersetInfix)
+		b.WriteString("type_")
+		b.WriteString(s.Type)
+		b.WriteString("_value_")
+		b.WriteString(s.Value)
+
+		allIdx.WriteString("type_")
+		allIdx.WriteString(s.Type)
+		allIdx.WriteString("_value_")
+		allIdx.WriteString(s.Value)
+
+		indexes = append(indexes, b.String())
+	}
+
+	return append(indexes, allIdx.String())
 }
 
 func (p *plugin) PruneRegistrationEntries(ctx context.Context, expiresBefore time.Time) error {
