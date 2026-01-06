@@ -3,7 +3,6 @@ package cassandra
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -495,7 +494,7 @@ func (p *plugin) FetchRegistrationEntries(ctx context.Context, entryIDs []string
 type queryTerm struct {
 	field    string
 	operator string
-	values   any
+	values   []any
 }
 
 func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.ListRegistrationEntriesRequest) (*datastore.ListRegistrationEntriesResponse, error) {
@@ -517,40 +516,42 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 		return nil, status.Error(codes.InvalidArgument, "cannot list by empty selector set")
 	}
 
-	args := []any{}
-	fields := []string{}
-	operators := []string{}
-	if len(req.ByParentID) > 0 { // I THINK I CAN DO THIS WITH CONTAINS MAYBE ??
-		args = append(args, req.ByParentID)
-		fields = append(fields, "parent_id")
-		operators = append(operators, "=")
+	terms := []queryTerm{}
+	if len(req.ByParentID) > 0 {
+		terms = append(terms, queryTerm{
+			field:    "parent_id",
+			operator: "=",
+			values:   []any{req.ByParentID},
+		})
 	}
 
 	if len(req.BySpiffeID) > 0 {
-		args = append(args, req.BySpiffeID)
-		fields = append(fields, "spiffe_id")
-		operators = append(operators, "=")
+		terms = append(terms, queryTerm{
+			field:    "spiffe_id",
+			operator: "=",
+			values:   []any{req.BySpiffeID},
+		})
 	}
 
 	if req.ByDownstream != nil {
-		args = append(args, *req.ByDownstream)
-		fields = append(fields, "downstream")
-		operators = append(operators, "=")
+		terms = append(terms, queryTerm{
+			field:    "downstream",
+			operator: "=",
+			values:   []any{*req.ByDownstream},
+		})
+	}
+
+	if len(req.ByHint) > 0 {
+		terms = append(terms, queryTerm{
+			field:    "hint",
+			operator: "=",
+			values:   []any{req.ByHint},
+		})
 	}
 
 	if req.ByFederatesWith != nil || req.BySelectors != nil {
 		indexes := generateSearchIndexForRequest(req)
-		if len(indexes) == 3 {
-			fields = append(fields, indexes[0])
-			operators = append(operators, indexes[1])
-			args = append(args, indexes[2])
-		}
-	}
-
-	if len(req.ByHint) > 0 {
-		args = append(args, req.ByHint)
-		fields = append(fields, "hint")
-		operators = append(operators, "=")
+		terms = append(terms, indexes)
 	}
 
 	b := strings.Builder{}
@@ -575,20 +576,28 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 			selector_values
 		FROM registered_entries
 	`)
-	if len(fields) > 0 {
+	if len(terms) > 0 {
 		b.WriteString(" WHERE ")
 	}
 
-	if len(fields) > 0 {
-		for i, field := range fields {
-			if i > 0 {
-				b.WriteString(" AND ")
-			}
-			b.WriteString(field)
-			b.WriteString(" ")
-			b.WriteString(operators[i])
+	args := make([]any, 0, len(terms))
+	for i, term := range terms {
+		if i > 0 {
+			b.WriteString(" AND ")
+		}
+		b.WriteString(term.field)
+		b.WriteString(" ")
+		b.WriteString(term.operator)
+
+		if term.operator == "IN" {
+			b.WriteString(" (")
+			b.WriteString(strings.TrimRight(strings.Repeat(" ?,", len(term.values)), ","))
+			b.WriteString(")")
+		} else {
 			b.WriteString(" ?")
 		}
+
+		args = append(args, term.values...)
 	}
 
 	b.WriteString(" ALLOW FILTERING")
@@ -675,33 +684,30 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	return r, nil
 }
 
-func generateSearchIndexForRequest(req *datastore.ListRegistrationEntriesRequest) [3]string {
+func generateSearchIndexForRequest(req *datastore.ListRegistrationEntriesRequest) queryTerm {
 	if req.BySelectors != nil {
 		switch req.BySelectors.Match {
 		case datastore.Exact:
-			return [3]string{
-				"index_terms",
-				"CONTAINS",
-				buildSelectorMatchExactIndex(req.BySelectors.Selectors),
+			return queryTerm{
+				field:    "index_terms",
+				operator: "CONTAINS",
+				values:   []any{buildSelectorMatchExactIndex(req.BySelectors.Selectors)},
 			}
 		case datastore.Subset:
 		case datastore.MatchAny:
-			vals := []string{}
-			for _, sl := range req.BySelectors.Selectors {
+			vals := make([]any, len(req.BySelectors.Selectors))
+			for i, sl := range req.BySelectors.Selectors {
 				b := strings.Builder{}
-				b.WriteByte('\'')
 				b.WriteString(sl.Type)
 				b.WriteString("|")
 				b.WriteString(sl.Value)
-				b.WriteByte('\'')
-				vals = append(vals, b.String())
+				vals[i] = b.String()
 			}
 
-			return [3]string{
-				"unrolled_selector_type_val",
-				"IN",
-				// TODO(tjons): fix the security issue here
-				fmt.Sprintf("(%s)", strings.Join(vals, ", ")),
+			return queryTerm{
+				field:    "unrolled_selector_type_val",
+				operator: "IN",
+				values:   vals,
 			}
 		case datastore.Superset:
 			// return buildSelectorSupersetMatchIndexes(req.BySelectors.Selectors)
@@ -711,10 +717,10 @@ func generateSearchIndexForRequest(req *datastore.ListRegistrationEntriesRequest
 	if req.ByFederatesWith != nil {
 		switch req.ByFederatesWith.Match {
 		case datastore.Exact:
-			return [3]string{
-				"index_terms",
-				"CONTAINS",
-				buildFtdExactIndex(req.ByFederatesWith.TrustDomains),
+			return queryTerm{
+				field:    "index_terms",
+				operator: "CONTAINS",
+				values:   []any{buildFtdExactIndex(req.ByFederatesWith.TrustDomains)},
 			}
 		case datastore.Subset:
 		case datastore.MatchAny:
@@ -724,7 +730,7 @@ func generateSearchIndexForRequest(req *datastore.ListRegistrationEntriesRequest
 		}
 	}
 
-	return [3]string{}
+	return queryTerm{}
 }
 
 const ftdIndexPrefix = "ftd_"

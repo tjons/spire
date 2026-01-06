@@ -3120,9 +3120,6 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 				name += " read-only"
 			}
 
-			if name != "by parent ID and match any selectors without pagination" {
-				continue
-			}
 			s.T().Run(name, func(t *testing.T) {
 				s.ds = s.newPlugin()
 				defer s.ds.Close()
