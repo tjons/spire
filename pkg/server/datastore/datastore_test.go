@@ -3121,7 +3121,7 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 				name += " read-only"
 			}
 
-			if strings.ReplaceAll(name, " ", "_") != "by_parent_ID_and_superset_selectors_with_pagination" {
+			if strings.ReplaceAll(name, " ", "_") != "by_SPIFFE_ID_and_subset_selectors_with_pagination" {
 				// continue
 			}
 

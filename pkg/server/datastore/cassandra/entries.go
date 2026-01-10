@@ -499,10 +499,12 @@ func (p *plugin) FetchRegistrationEntries(ctx context.Context, entryIDs []string
 }
 
 type queryTerm struct {
-	field      string
-	operator   string
-	values     []any
-	deepValues [][]any
+	field              string
+	operator           string
+	values             []any
+	deepValues         [][]any
+	requireDistinct    bool
+	includeExtraColumn bool
 }
 
 func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.ListRegistrationEntriesRequest) (*datastore.ListRegistrationEntriesResponse, error) {
@@ -525,6 +527,7 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	}
 
 	collapseToPartitionRow := true
+	onlyFiltersStaticCols := true
 	terms := []queryTerm{}
 	if len(req.ByParentID) > 0 {
 		terms = append(terms, queryTerm{
@@ -570,6 +573,7 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 		}
 	}
 
+	addDistinctionColumn := false
 	b := strings.Builder{}
 	b.WriteString(`
 		SELECT
@@ -591,18 +595,18 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 			selector_types,
 			selector_values
 		FROM registered_entries  
-		WHERE 
 	`)
 	if collapseToPartitionRow {
-		b.WriteString(" unrolled_selector_type_val = '' AND unrolled_ftd = '' ") // no filtering at all, get all entries but limit this to the empty row for paging
-		if len(terms) > 0 {
-			b.WriteString(" AND ")
-		}
+		// b.WriteString(" unrolled_selector_type_val = '' AND unrolled_ftd = '' ") // no filtering at all, get all entries but limit this to the empty row for paging
+		// if len(terms) > 0 {
+		// 	b.WriteString(" AND ")
+		// }
+		// needsDistinct = true
 	}
 
 	args := make([]any, 0, len(terms))
 	if len(terms) > 0 {
-		// b.WriteString("WHERE ")
+		b.WriteString("WHERE ")
 
 		for i, term := range terms {
 			if i > 0 {
@@ -613,6 +617,15 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 			b.WriteString(term.operator)
 
 			if term.operator == "IN" {
+				if !addDistinctionColumn {
+					addDistinctionColumn = term.includeExtraColumn
+					onlyFiltersStaticCols = false
+				}
+
+				if term.requireDistinct {
+					onlyFiltersStaticCols = true
+				}
+				// TODO(tjons): the logic in here is actually kinda dangerous
 				if len(term.deepValues) > 0 {
 					b.WriteString(" (")
 					b.WriteString(strings.TrimRight(strings.Repeat(" ?,", len(term.deepValues)), ","))
@@ -622,7 +635,6 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 					}
 					continue
 				}
-				// TODO(tjons): quite unsure of this and whether it can work or not
 
 				b.WriteString(" (")
 				b.WriteString(strings.TrimRight(strings.Repeat(" ?,", len(term.values)), ","))
@@ -638,6 +650,14 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	b.WriteString(" ALLOW FILTERING")
 
 	query := b.String()
+	if !addDistinctionColumn {
+		query = strings.Replace(query, "updated_at,", "", 1)
+	}
+
+	if onlyFiltersStaticCols {
+		query = strings.Replace(query, "SELECT", "SELECT DISTINCT", 1)
+	}
+
 	cqlQuery := p.db.session.Query(query, args...)
 	cqlQuery.Consistency(gocql.LocalQuorum)
 
@@ -661,27 +681,49 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 		var (
 			result                        = new(RegistrationEntry)
 			selectorTypes, selectorValues []string
+			err                           error
 		)
 
-		err := scanner.Scan(
-			&result.CreatedAt,
-			&result.UpdatedAt,
-			&result.EntryID,
-			&result.SpiffeID,
-			&result.ParentID,
-			&result.TTL,
-			&result.Admin,
-			&result.Downstream,
-			&result.Expiry,
-			&result.RevisionNumber,
-			&result.StoreSVID,
-			&result.Hint,
-			&result.JWTSVIDTTL,
-			&result.DNSNames,
-			&result.FederatedTrustDomains,
-			&selectorTypes,
-			&selectorValues,
-		)
+		if !addDistinctionColumn {
+			err = scanner.Scan(
+				&result.CreatedAt,
+				&result.EntryID,
+				&result.SpiffeID,
+				&result.ParentID,
+				&result.TTL,
+				&result.Admin,
+				&result.Downstream,
+				&result.Expiry,
+				&result.RevisionNumber,
+				&result.StoreSVID,
+				&result.Hint,
+				&result.JWTSVIDTTL,
+				&result.DNSNames,
+				&result.FederatedTrustDomains,
+				&selectorTypes,
+				&selectorValues,
+			)
+		} else {
+			err = scanner.Scan(
+				&result.CreatedAt,
+				&result.UpdatedAt,
+				&result.EntryID,
+				&result.SpiffeID,
+				&result.ParentID,
+				&result.TTL,
+				&result.Admin,
+				&result.Downstream,
+				&result.Expiry,
+				&result.RevisionNumber,
+				&result.StoreSVID,
+				&result.Hint,
+				&result.JWTSVIDTTL,
+				&result.DNSNames,
+				&result.FederatedTrustDomains,
+				&selectorTypes,
+				&selectorValues,
+			)
+		}
 		if err != nil {
 			return nil, newWrappedCassandraError(err)
 		}
@@ -765,9 +807,10 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 		switch req.BySelectors.Match {
 		case datastore.Exact:
 			indices = append(indices, queryTerm{
-				field:    "index_terms",
-				operator: "CONTAINS",
-				values:   []any{buildSelectorMatchExactIndex(req.BySelectors.Selectors)},
+				field:           "index_terms",
+				operator:        "CONTAINS",
+				values:          []any{buildSelectorMatchExactIndex(req.BySelectors.Selectors)},
+				requireDistinct: true,
 			})
 		case datastore.Subset:
 			selectors := make([]any, len(req.BySelectors.Selectors))
@@ -783,9 +826,10 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 			vals := Combinations(selectors)
 
 			indices = append(indices, queryTerm{
-				field:      "selector_type_value_full",
-				operator:   "IN",
-				deepValues: vals,
+				field:           "selector_type_value_full",
+				operator:        "IN",
+				deepValues:      vals,
+				requireDistinct: true,
 			})
 		case datastore.MatchAny:
 			vals := make([]any, len(req.BySelectors.Selectors))
@@ -798,9 +842,10 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 			}
 
 			indices = append(indices, queryTerm{
-				field:    "unrolled_selector_type_val",
-				operator: "IN",
-				values:   vals,
+				field:              "unrolled_selector_type_val",
+				operator:           "IN",
+				values:             vals,
+				includeExtraColumn: true,
 			})
 		case datastore.Superset:
 			b := strings.Builder{}
@@ -817,9 +862,10 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 			}
 
 			indices = append(indices, queryTerm{
-				field:    "index_terms",
-				operator: "CONTAINS",
-				values:   []any{b.String()},
+				field:           "index_terms",
+				operator:        "CONTAINS",
+				values:          []any{b.String()},
+				requireDistinct: true,
 			})
 		}
 	}
@@ -828,9 +874,10 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 		switch req.ByFederatesWith.Match {
 		case datastore.Exact:
 			indices = append(indices, queryTerm{
-				field:    "index_terms",
-				operator: "CONTAINS",
-				values:   []any{buildFtdExactIndex(req.ByFederatesWith.TrustDomains)},
+				field:           "index_terms",
+				operator:        "CONTAINS",
+				values:          []any{buildFtdExactIndex(req.ByFederatesWith.TrustDomains)},
+				requireDistinct: true,
 			})
 		case datastore.Subset:
 			tds := make([]any, len(req.ByFederatesWith.TrustDomains))
@@ -840,9 +887,10 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 
 			vals := Combinations(tds)
 			indices = append(indices, queryTerm{
-				field:      "federated_trust_domains_full",
-				operator:   "IN",
-				deepValues: vals,
+				field:           "federated_trust_domains_full",
+				operator:        "IN",
+				deepValues:      vals,
+				requireDistinct: true,
 			})
 		case datastore.MatchAny:
 			vals := make([]any, len(req.ByFederatesWith.TrustDomains))
@@ -851,9 +899,10 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 			}
 
 			indices = append(indices, queryTerm{
-				field:    "unrolled_ftd",
-				operator: "IN",
-				values:   vals,
+				field:              "unrolled_ftd",
+				operator:           "IN",
+				values:             vals,
+				includeExtraColumn: true,
 			})
 		case datastore.Superset:
 			b := strings.Builder{}
@@ -868,9 +917,10 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 			}
 
 			indices = append(indices, queryTerm{
-				field:    "index_terms",
-				operator: "CONTAINS",
-				values:   []any{b.String()},
+				field:           "index_terms",
+				operator:        "CONTAINS",
+				values:          []any{b.String()},
+				requireDistinct: true,
 			})
 		}
 	}
