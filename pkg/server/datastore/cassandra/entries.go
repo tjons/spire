@@ -1031,7 +1031,7 @@ func buildSelectorSupersetMatchIndexes(selectors []*common.Selector) []string {
 
 	for i, s := range selectors {
 		if i > 0 {
-			allIdx.WriteString("_")
+			allIdx.WriteString("__")
 		}
 
 		b := strings.Builder{}

@@ -159,8 +159,8 @@ would have these `filter_val` rows:
   - [x] by_parent_ID_and_match_any_selectors_no_match_without_pagination 
   - [x] by_parent_ID_and_superset_selector_with_pagination 
   - [x] by_parent_ID_and_superset_selector_without_pagination 
-  - [ ] by_parent_ID_and_superset_selectors_with_pagination 
-  - [ ] by_parent_ID_and_superset_selectors_without_pagination 
+  - [x] by_parent_ID_and_superset_selectors_with_pagination 
+  - [x] by_parent_ID_and_superset_selectors_without_pagination 
   - [x] by_parent_ID_and_superset_selectors_no_match_with_pagination 
   - [x] by_parent_ID_and_superset_selectors_no_match_without_pagination 
   - [x] by_parentID_and_federatesWith_one_subset_with_pagination 
@@ -197,8 +197,8 @@ would have these `filter_val` rows:
   - [x] by_SPIFFE_ID_and_match_any_selectors_no_match_without_pagination 
   - [x] by_SPIFFE_ID_and_superset_selector_with_pagination 
   - [x] by_SPIFFE_ID_and_superset_selector_without_pagination 
-  - [ ] by_SPIFFE_ID_and_superset_selectors_with_pagination 
-  - [ ] by_SPIFFE_ID_and_superset_selectors_without_pagination 
+  - [x] by_SPIFFE_ID_and_superset_selectors_with_pagination 
+  - [x] by_SPIFFE_ID_and_superset_selectors_without_pagination 
   - [x] by_SPIFFE_ID_and_superset_selectors_no_match_with_pagination 
   - [x] by_SPIFFE_ID_and_superset_selectors_no_match_without_pagination 
   - [x] by_SPIFFE_ID_and_federatesWith_one_subset_with_pagination 
@@ -277,8 +277,8 @@ would have these `filter_val` rows:
   - [x] by_parent_ID_and_match_any_selectors_no_match_without_pagination_read-only 
   - [x] by_parent_ID_and_superset_selector_with_pagination_read-only 
   - [x] by_parent_ID_and_superset_selector_without_pagination_read-only 
-  - [ ] by_parent_ID_and_superset_selectors_with_pagination_read-only 
-  - [ ] by_parent_ID_and_superset_selectors_without_pagination_read-only 
+  - [x] by_parent_ID_and_superset_selectors_with_pagination_read-only 
+  - [x] by_parent_ID_and_superset_selectors_without_pagination_read-only 
   - [x] by_parent_ID_and_superset_selectors_no_match_with_pagination_read-only 
   - [x] by_parent_ID_and_superset_selectors_no_match_without_pagination_read-only 
   - [x] by_parentID_and_federatesWith_one_subset_with_pagination_read-only 
@@ -315,8 +315,8 @@ would have these `filter_val` rows:
   - [x] by_SPIFFE_ID_and_match_any_selectors_no_match_without_pagination_read-only 
   - [x] by_SPIFFE_ID_and_superset_selector_with_pagination_read-only 
   - [x] by_SPIFFE_ID_and_superset_selector_without_pagination_read-only 
-  - [ ] by_SPIFFE_ID_and_superset_selectors_with_pagination_read-only 
-  - [ ] by_SPIFFE_ID_and_superset_selectors_without_pagination_read-only 
+  - [x] by_SPIFFE_ID_and_superset_selectors_with_pagination_read-only 
+  - [x] by_SPIFFE_ID_and_superset_selectors_without_pagination_read-only 
   - [x] by_SPIFFE_ID_and_superset_selectors_no_match_with_pagination_read-only 
   - [x] by_SPIFFE_ID_and_superset_selectors_no_match_without_pagination_read-only 
   - [x] by_SPIFFE_ID_and_federatesWith_one_subset_with_pagination_read-only 

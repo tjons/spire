@@ -3121,9 +3121,9 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 				name += " read-only"
 			}
 
-			// if strings.ReplaceAll(name, " ", "_") != "by_parentID_and_federatesWith_one_match_any_with_pagination" {
-			// 	continue
-			// }
+			if strings.ReplaceAll(name, " ", "_") != "by_parent_ID_and_superset_selectors_with_pagination" {
+				// continue
+			}
 
 			s.T().Run(name, func(t *testing.T) {
 				s.ds = s.newPlugin()

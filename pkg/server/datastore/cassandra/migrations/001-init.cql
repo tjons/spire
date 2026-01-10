@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS registered_entries (
     created_at timestamp STATIC,
-    updated_at timestamp,
+    updated_at timestamp, --- not static for exotic cassandra big-brain reasons
     entry_id text,
     spiffe_id text STATIC,
     parent_id text STATIC,
