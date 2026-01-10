@@ -24,9 +24,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/spire-api-sdk/proto/spire/api/types"
-	configv1 "github.com/spiffe/spire-plugin-sdk/proto/spire/service/common/config/v1"
 	"github.com/spiffe/spire/pkg/common/bundleutil"
-	"github.com/spiffe/spire/pkg/common/catalog"
 	"github.com/spiffe/spire/pkg/common/protoutil"
 	"github.com/spiffe/spire/pkg/common/telemetry"
 	"github.com/spiffe/spire/pkg/common/x509util"
@@ -514,7 +512,7 @@ func (ds *Plugin) FetchRegistrationEntry(ctx context.Context,
 		return nil, err
 	}
 
-	// Return the last element in the list
+	// Return the last element in the list //TODO(tjons): incorrect comment
 	return entries[entryID], nil
 }
 
@@ -566,7 +564,7 @@ func (ds *Plugin) UpdateRegistrationEntry(ctx context.Context, e *common.Registr
 // DeleteRegistrationEntry deletes the given registration
 func (ds *Plugin) DeleteRegistrationEntry(ctx context.Context,
 	entryID string,
-) (registrationEntry *common.RegistrationEntry, err error) {
+) (registrationEntry *common.RegistrationEntry, err error) { // consider removing the return, there is no need to return it as it is not used anywhere
 	if err = ds.withWriteTx(ctx, func(tx *gorm.DB) (err error) {
 		registrationEntry, err = deleteRegistrationEntry(tx, entryID)
 		if err != nil {
@@ -582,6 +580,7 @@ func (ds *Plugin) DeleteRegistrationEntry(ctx context.Context,
 	return registrationEntry, nil
 }
 
+// TODO(tjons): this is not correct
 // PruneRegistrationEntries takes a registration entry message, and deletes all entries which have expired
 // before the date in the message
 func (ds *Plugin) PruneRegistrationEntries(ctx context.Context, expiresBefore time.Time) (err error) {
@@ -634,7 +633,7 @@ func (ds *Plugin) FetchRegistrationEntryEvent(ctx context.Context, eventID uint)
 }
 
 // CreateJoinToken takes a Token message and stores it
-func (ds *Plugin) CreateJoinToken(ctx context.Context, token *datastore.JoinToken) (err error) {
+func (ds *Plugin) CreateJoinToken(ctx context.Context, token *datastore.JoinToken) error { // (tjons): updated these bc no need to name retval
 	if token == nil || token.Token == "" || token.Expiry.IsZero() {
 		return errors.New("token and expiry are required")
 	}
@@ -659,7 +658,7 @@ func (ds *Plugin) FetchJoinToken(ctx context.Context, token string) (resp *datas
 }
 
 // DeleteJoinToken deletes the given join token
-func (ds *Plugin) DeleteJoinToken(ctx context.Context, token string) (err error) {
+func (ds *Plugin) DeleteJoinToken(ctx context.Context, token string) error {
 	return ds.withWriteTx(ctx, func(tx *gorm.DB) (err error) {
 		err = deleteJoinToken(tx, token)
 		return err
@@ -668,7 +667,7 @@ func (ds *Plugin) DeleteJoinToken(ctx context.Context, token string) (err error)
 
 // PruneJoinTokens takes a Token message, and deletes all tokens which have expired
 // before the date in the message
-func (ds *Plugin) PruneJoinTokens(ctx context.Context, expiry time.Time) (err error) {
+func (ds *Plugin) PruneJoinTokens(ctx context.Context, expiry time.Time) error {
 	return ds.withWriteTx(ctx, func(tx *gorm.DB) (err error) {
 		err = pruneJoinTokens(tx, expiry)
 		return err
@@ -868,23 +867,27 @@ func (ds *Plugin) Configure(ctx context.Context, hclConfiguration string) error 
 	return ds.openConnections(ctx, config)
 }
 
-func (ds *Plugin) Validate(ctx context.Context, coreConfig catalog.CoreConfig, configuration string) (*configv1.ValidateResponse, error) {
-	config, err := buildConfig(configuration)
-	if err != nil {
-		return &configv1.ValidateResponse{
-			Notes: []string{err.Error()},
-		}, err
-	}
-	err = config.Validate()
-	if err != nil {
-		return &configv1.ValidateResponse{
-			Notes: []string{err.Error()},
-		}, err
-	}
+// func (ds *Plugin) Validate(ctx context.Context, configuration string) (*configv1.ValidateResponse, error) {
+// 	config, err := buildConfig(configuration)
+// 	if err != nil {
+// 		return &configv1.ValidateResponse{
+// 			Notes: []string{err.Error()},
+// 		}, err
+// 	}
+// 	err = config.Validate()
+// 	if err != nil {
+// 		return &configv1.ValidateResponse{
+// 			Notes: []string{err.Error()},
+// 		}, err
+// 	}
 
-	return &configv1.ValidateResponse{
-		Valid: true,
-	}, nil
+// 	return &configv1.ValidateResponse{
+// 		Valid: true,
+// 	}, nil
+// }
+
+func (ds *Plugin) Validate(ctx context.Context, hclConfiguration string) error {
+	return nil
 }
 
 func buildConfig(hclConfiguration string) (*configuration, error) {
@@ -1371,6 +1374,7 @@ func countBundles(tx *gorm.DB) (int32, error) {
 
 // listBundles can be used to fetch all existing bundles.
 func listBundles(tx *gorm.DB, req *datastore.ListBundlesRequest) (*datastore.ListBundlesResponse, error) {
+	// TODO(tjons): this is not nil safe and will panic on an empty req value!
 	if req.Pagination != nil && req.Pagination.PageSize == 0 {
 		return nil, status.Error(codes.InvalidArgument, "cannot paginate with pagesize = 0")
 	}
@@ -1407,6 +1411,7 @@ func listBundles(tx *gorm.DB, req *datastore.ListBundlesRequest) (*datastore.Lis
 			return nil, err
 		}
 
+		// TODO(tjons): we can improve the performance of this by pre-allocating the length of Bundles
 		resp.Bundles = append(resp.Bundles, bundle)
 	}
 
@@ -4141,7 +4146,7 @@ func pruneRegistrationEntries(tx *gorm.DB, expiresBefore time.Time, logger logru
 
 func createRegistrationEntryEvent(tx *gorm.DB, event *datastore.RegistrationEntryEvent) error {
 	if err := tx.Create(&RegisteredEntryEvent{
-		Model: Model{
+		Model: Model{ //TODO(tjons): this feels wrong?
 			ID: event.EventID,
 		},
 		EntryID: event.EntryID,
@@ -4684,7 +4689,7 @@ func modelToJoinToken(model JoinToken) *datastore.JoinToken {
 func modelToCAJournal(model CAJournal) *datastore.CAJournal {
 	return &datastore.CAJournal{
 		ID:                    model.ID,
-		Data:                  model.Data,
+		Data:                  model.Data, // TODO(tjons): why is this not unmarshalled here?
 		ActiveX509AuthorityID: model.ActiveX509AuthorityID,
 	}
 }
@@ -4703,7 +4708,7 @@ func makeFederatesWith(tx *gorm.DB, ids []string) ([]*Bundle, error) {
 
 	for _, id := range ids {
 		if !idset[id] {
-			return nil, fmt.Errorf("unable to find federated bundle %q", id)
+			return nil, fmt.Errorf("unable to find federated bundle %q", id) // Should be codes.NotFound?
 		}
 	}
 
