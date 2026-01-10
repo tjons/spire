@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"maps"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -166,9 +167,11 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 			selector_types,
 			selector_values,
 			index_terms,
+			selector_type_value_full,
+			federated_trust_domains_full,
 			unrolled_selector_type_val,
 			unrolled_ftd
-		) VALUES (toTimestamp(now()), toTimestamp(now()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (toTimestamp(now()), toTimestamp(now()), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	// TODO(tjons): consistency level?
@@ -176,10 +179,12 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 
 	selectorTypes := make([]string, 0, len(entry.Selectors))
 	selectorValues := make([]string, 0, len(entry.Selectors))
+	selectorTypeValueFull := make([]string, 0, len(entry.Selectors))
 
 	for _, sl := range entry.Selectors {
 		selectorTypes = append(selectorTypes, sl.Type)
 		selectorValues = append(selectorValues, sl.Value)
+		selectorTypeValueFull = append(selectorTypeValueFull, sl.Type+"|"+sl.Value)
 	}
 
 	commonVals := []any{
@@ -199,6 +204,8 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 		selectorTypes,
 		selectorValues,
 		indexes,
+		selectorTypeValueFull,
+		newRegisteredEntry.FederatedTrustDomains,
 	}
 
 	b.Entries = []gocql.BatchEntry{
@@ -492,9 +499,10 @@ func (p *plugin) FetchRegistrationEntries(ctx context.Context, entryIDs []string
 }
 
 type queryTerm struct {
-	field    string
-	operator string
-	values   []any
+	field      string
+	operator   string
+	values     []any
+	deepValues [][]any
 }
 
 func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.ListRegistrationEntriesRequest) (*datastore.ListRegistrationEntriesResponse, error) {
@@ -516,6 +524,7 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 		return nil, status.Error(codes.InvalidArgument, "cannot list by empty selector set")
 	}
 
+	collapseToPartitionRow := true
 	terms := []queryTerm{}
 	if len(req.ByParentID) > 0 {
 		terms = append(terms, queryTerm{
@@ -550,13 +559,20 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	}
 
 	if req.ByFederatesWith != nil || req.BySelectors != nil {
-		indexes := generateSearchIndexForRequest(req)
-		terms = append(terms, indexes)
+		indexes := generateSearchIndexesForRequest(req)
+		terms = append(terms, indexes...)
+		// TODO(tjons): this has to be temp
+
+		for _, idx := range indexes {
+			if idx.operator == "IN" {
+				collapseToPartitionRow = false
+			}
+		}
 	}
 
 	b := strings.Builder{}
 	b.WriteString(`
-		SELECT 
+		SELECT
 			created_at,
 			updated_at,
 			entry_id,
@@ -574,30 +590,49 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 			federated_trust_domains,
 			selector_types,
 			selector_values
-		FROM registered_entries
+		FROM registered_entries  
+		WHERE 
 	`)
-	if len(terms) > 0 {
-		b.WriteString(" WHERE ")
+	if collapseToPartitionRow {
+		b.WriteString(" unrolled_selector_type_val = '' AND unrolled_ftd = '' ") // no filtering at all, get all entries but limit this to the empty row for paging
+		if len(terms) > 0 {
+			b.WriteString(" AND ")
+		}
 	}
 
 	args := make([]any, 0, len(terms))
-	for i, term := range terms {
-		if i > 0 {
-			b.WriteString(" AND ")
-		}
-		b.WriteString(term.field)
-		b.WriteString(" ")
-		b.WriteString(term.operator)
+	if len(terms) > 0 {
+		// b.WriteString("WHERE ")
 
-		if term.operator == "IN" {
-			b.WriteString(" (")
-			b.WriteString(strings.TrimRight(strings.Repeat(" ?,", len(term.values)), ","))
-			b.WriteString(")")
-		} else {
-			b.WriteString(" ?")
-		}
+		for i, term := range terms {
+			if i > 0 {
+				b.WriteString(" AND ")
+			}
+			b.WriteString(term.field)
+			b.WriteString(" ")
+			b.WriteString(term.operator)
 
-		args = append(args, term.values...)
+			if term.operator == "IN" {
+				if len(term.deepValues) > 0 {
+					b.WriteString(" (")
+					b.WriteString(strings.TrimRight(strings.Repeat(" ?,", len(term.deepValues)), ","))
+					b.WriteString(")")
+					for _, dv := range term.deepValues {
+						args = append(args, dv)
+					}
+					continue
+				}
+				// TODO(tjons): quite unsure of this and whether it can work or not
+
+				b.WriteString(" (")
+				b.WriteString(strings.TrimRight(strings.Repeat(" ?,", len(term.values)), ","))
+				b.WriteString(")")
+			} else {
+				b.WriteString(" ?")
+			}
+
+			args = append(args, term.values...)
+		}
 	}
 
 	b.WriteString(" ALLOW FILTERING")
@@ -665,6 +700,7 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	if err := scanner.Err(); err != nil {
 		return nil, newWrappedCassandraError(err)
 	}
+	pageState := iter.PageState()
 
 	r := &datastore.ListRegistrationEntriesResponse{
 		Entries: make([]*common.RegistrationEntry, 0, len(entryMap)),
@@ -678,22 +714,79 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 		r.Pagination = &datastore.Pagination{
 			PageSize: req.Pagination.PageSize,
 		}
-		r.Pagination.Token = base64.URLEncoding.Strict().EncodeToString(iter.PageState())
+
+		// go ahead and "peek"	if there is a next page...
+		peeker := p.db.session.Query(query, args...)
+		peeker.Consistency(gocql.LocalQuorum)
+
+		peeker.PageState(pageState)
+		peeker.PageSize(1)        // I hate all this and i think it would be better if we just dropped the silly next pagination requirement for cassandra
+		peekIter := peeker.Iter() // at a minimum, we should feature flag this
+		if peekIter.NumRows() > 0 {
+			r.Pagination.Token = base64.URLEncoding.Strict().EncodeToString(pageState)
+		}
+		if err := peekIter.Close(); err != nil {
+			return nil, newWrappedCassandraError(err)
+		}
 	}
 
 	return r, nil
 }
 
-func generateSearchIndexForRequest(req *datastore.ListRegistrationEntriesRequest) queryTerm {
+func Combinations[T any](els []T) [][]T {
+	if len(els) == 0 {
+		return [][]T{}
+	}
+
+	results := [][]T{}
+
+	count := int(math.Pow(2, float64(len(els))))
+
+	for i := range count {
+		subset := []T{}
+
+		for j := range len(els) {
+			if (i & (1 << j)) > 0 {
+				subset = append(subset, els[j])
+			}
+		}
+
+		if len(subset) > 0 {
+			results = append(results, subset)
+		}
+	}
+
+	return results
+}
+
+func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesRequest) []queryTerm {
+	var indices []queryTerm
 	if req.BySelectors != nil {
 		switch req.BySelectors.Match {
 		case datastore.Exact:
-			return queryTerm{
+			indices = append(indices, queryTerm{
 				field:    "index_terms",
 				operator: "CONTAINS",
 				values:   []any{buildSelectorMatchExactIndex(req.BySelectors.Selectors)},
-			}
+			})
 		case datastore.Subset:
+			selectors := make([]any, len(req.BySelectors.Selectors))
+
+			for i, sl := range req.BySelectors.Selectors {
+				b := strings.Builder{}
+				b.WriteString(sl.Type)
+				b.WriteString("|")
+				b.WriteString(sl.Value)
+				selectors[i] = b.String()
+			}
+
+			vals := Combinations(selectors)
+
+			indices = append(indices, queryTerm{
+				field:      "selector_type_value_full",
+				operator:   "IN",
+				deepValues: vals,
+			})
 		case datastore.MatchAny:
 			vals := make([]any, len(req.BySelectors.Selectors))
 			for i, sl := range req.BySelectors.Selectors {
@@ -704,33 +797,85 @@ func generateSearchIndexForRequest(req *datastore.ListRegistrationEntriesRequest
 				vals[i] = b.String()
 			}
 
-			return queryTerm{
+			indices = append(indices, queryTerm{
 				field:    "unrolled_selector_type_val",
 				operator: "IN",
 				values:   vals,
-			}
+			})
 		case datastore.Superset:
-			// return buildSelectorSupersetMatchIndexes(req.BySelectors.Selectors)
+			b := strings.Builder{}
+			b.WriteString(selectorMatchPrefix)
+			b.WriteString(matcherSupersetInfix)
+			for i, sl := range req.BySelectors.Selectors {
+				if i > 0 {
+					b.WriteString("__")
+				}
+				b.WriteString("type_")
+				b.WriteString(sl.Type)
+				b.WriteString("_value_")
+				b.WriteString(sl.Value)
+			}
+
+			indices = append(indices, queryTerm{
+				field:    "index_terms",
+				operator: "CONTAINS",
+				values:   []any{b.String()},
+			})
 		}
 	}
 
 	if req.ByFederatesWith != nil {
 		switch req.ByFederatesWith.Match {
 		case datastore.Exact:
-			return queryTerm{
+			indices = append(indices, queryTerm{
 				field:    "index_terms",
 				operator: "CONTAINS",
 				values:   []any{buildFtdExactIndex(req.ByFederatesWith.TrustDomains)},
-			}
+			})
 		case datastore.Subset:
+			tds := make([]any, len(req.ByFederatesWith.TrustDomains))
+			for i, td := range req.ByFederatesWith.TrustDomains {
+				tds[i] = td
+			}
+
+			vals := Combinations(tds)
+			indices = append(indices, queryTerm{
+				field:      "federated_trust_domains_full",
+				operator:   "IN",
+				deepValues: vals,
+			})
 		case datastore.MatchAny:
-			// return buildFtdAnyMatchIndexes(req.ByFederatesWith.TrustDomains)
+			vals := make([]any, len(req.ByFederatesWith.TrustDomains))
+			for i, td := range req.ByFederatesWith.TrustDomains {
+				vals[i] = td
+			}
+
+			indices = append(indices, queryTerm{
+				field:    "unrolled_ftd",
+				operator: "IN",
+				values:   vals,
+			})
 		case datastore.Superset:
-			// return buildFtdSupersetMatchIndexes(req.ByFederatesWith.TrustDomains)
+			b := strings.Builder{}
+			b.WriteString(ftdIndexPrefix)
+			b.WriteString(matcherSupersetInfix)
+			for i, td := range req.ByFederatesWith.TrustDomains {
+				if i > 0 {
+					b.WriteString("__")
+				}
+				b.WriteString("td_")
+				b.WriteString(td)
+			}
+
+			indices = append(indices, queryTerm{
+				field:    "index_terms",
+				operator: "CONTAINS",
+				values:   []any{b.String()},
+			})
 		}
 	}
 
-	return queryTerm{}
+	return indices
 }
 
 const ftdIndexPrefix = "ftd_"
@@ -740,10 +885,12 @@ func buildIndexesForRegistrationEntry(re *common.RegistrationEntry) (indexes []s
 	var sls, tds []string
 	if len(re.GetSelectors()) > 0 {
 		sls = buildSelectorIndexes(re.GetSelectors())
+		indexes = append(indexes, sls...)
 	}
 
 	if len(re.GetFederatesWith()) > 0 {
 		tds = buildFtdIndexes(re.GetFederatesWith())
+		indexes = append(indexes, tds...)
 	}
 
 	for _, s := range sls {
@@ -830,6 +977,7 @@ func buildSelectorIndexes(selectors []*common.Selector) (indexes []string) {
 	indexes = append(indexes, buildSelectorAnyMatchIndexes(selectors)...)
 	indexes = append(indexes, buildSelectorMatchExactIndex(selectors))
 	indexes = append(indexes, buildSelectorSupersetMatchIndexes(selectors)...)
+	// subset is implemented as "in these, but no others": see filterEntriesBySelectorSet in pkg/server/datastore/sqlstore/sqlstore.go
 
 	return
 }

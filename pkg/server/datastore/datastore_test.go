@@ -2755,6 +2755,7 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 			expectEntriesOut:      []*common.RegistrationEntry{foobarB, foobarAB1},
 			expectPagedTokensIn:   []string{"", "1", "2"},
 			expectPagedEntriesOut: [][]*common.RegistrationEntry{{foobarB}, {foobarAB1}, {}},
+			focus:                 true,
 		},
 		{
 			test:                  "by parent ID and subset selectors no match",
@@ -2782,7 +2783,6 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 			expectEntriesOut:      []*common.RegistrationEntry{foobarAB1, foobarCD12},
 			expectPagedTokensIn:   []string{"", "2", "3"},
 			expectPagedEntriesOut: [][]*common.RegistrationEntry{{foobarAB1}, {foobarCD12}, {}},
-			focus:                 true,
 		},
 		{
 			test:                  "by parent ID and match any selectors no match",
@@ -2866,6 +2866,7 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 			expectEntriesOut:      []*common.RegistrationEntry{bazbarAB1, bazbarAD12, bazbarCD12},
 			expectPagedTokensIn:   []string{"", "6", "7", "9"},
 			expectPagedEntriesOut: [][]*common.RegistrationEntry{{bazbarAB1}, {bazbarAD12}, {bazbarCD12}, {}},
+			focus:                 true,
 		},
 		{
 			test:                  "by parentID and federatesWith many match any",
@@ -3108,7 +3109,7 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 	} {
 		for _, withPagination := range []bool{true, false} {
 			if !tt.focus {
-				continue
+				// continue
 			}
 			name := tt.test
 			if withPagination {
@@ -3119,6 +3120,10 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 			if dataConsistency == datastore.TolerateStale {
 				name += " read-only"
 			}
+
+			// if strings.ReplaceAll(name, " ", "_") != "by_parentID_and_federatesWith_one_match_any_with_pagination" {
+			// 	continue
+			// }
 
 			s.T().Run(name, func(t *testing.T) {
 				s.ds = s.newPlugin()
@@ -3164,6 +3169,7 @@ func (s *PluginSuite) testListRegistrationEntries(dataConsistency datastore.Data
 					// Don't loop forever if there is a bug
 					if i > len(tt.entries) {
 						require.FailNowf(t, "Exhausted paging limit in test", "tokens=%q spiffeids=%q", tokensIn, actualEntriesOut)
+						// print("hit it")
 					}
 					if req.Pagination != nil {
 						tokensIn = append(tokensIn, req.Pagination.Token)

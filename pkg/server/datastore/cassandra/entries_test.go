@@ -1,6 +1,7 @@
 package cassandra
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/spiffe/spire/proto/spire/common"
@@ -131,6 +132,55 @@ func TestMatchSupersetFederatedTrustDomainIndexes(t *testing.T) {
 	for i, exp := range expected {
 		if exp != actual[i] {
 			t.Errorf("expected federated trust domain superset match index %d to be %q, got %q", i, exp, actual[i])
+		}
+	}
+}
+
+func TestCombinations(t *testing.T) {
+	cases := []struct {
+		els      []string
+		expected [][]string
+	}{
+		{
+			els: []string{"a", "b", "c", "d"},
+			expected: [][]string{
+				{"a"},
+				{"b"},
+				{"c"},
+				{"d"},
+				{"a", "b"},
+				{"a", "c"},
+				{"a", "d"},
+				{"a", "b", "c"},
+				{"a", "c", "d"},
+				{"a", "b", "d"},
+				{"a", "b", "c", "d"},
+				{"b", "c"},
+				{"b", "d"},
+				{"b", "c", "d"},
+				{"c", "d"},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		ret := Combinations(c.els)
+		if len(ret) != len(c.expected) {
+			t.Fatalf("unxepected length")
+		}
+
+		for _, v := range ret {
+			expected := false
+			for _, w := range c.expected {
+				if slices.Equal(w, v) {
+					expected = true
+					break
+				}
+			}
+
+			if !expected {
+				t.Fatalf("expected to find %v in %v", v, c.expected)
+			}
 		}
 	}
 }

@@ -1,24 +1,26 @@
 CREATE TABLE IF NOT EXISTS registered_entries (
-    created_at timestamp,
+    created_at timestamp STATIC,
     updated_at timestamp,
     entry_id text,
-    spiffe_id text,
-    parent_id text,
-    ttl int,
-    admin boolean,
-    downstream boolean,
-    expiry bigint,
-    revision_number bigint,
-    store_svid boolean,
-    hint text,
-    jwt_svid_ttl int,
-    selector_types list<text>,
-    selector_values list<text>,
+    spiffe_id text STATIC,
+    parent_id text STATIC,
+    ttl int STATIC,
+    admin boolean STATIC,
+    downstream boolean STATIC,
+    expiry bigint STATIC,
+    revision_number bigint STATIC,
+    store_svid boolean STATIC,
+    hint text STATIC,
+    jwt_svid_ttl int STATIC,
+    selector_types frozen<list<text>> STATIC,
+    selector_values frozen<list<text>> STATIC,
     unrolled_selector_type_val text,
     unrolled_ftd text,
-    dns_names set<text>,
-    federated_trust_domains set<text>,
-    index_terms set<text>,
+    dns_names set<text> STATIC,
+    federated_trust_domains set<text> STATIC,
+    index_terms set<text> STATIC,
+    selector_type_value_full frozen<list<text>> STATIC,
+    federated_trust_domains_full frozen<list<text>> STATIC,
     PRIMARY KEY (entry_id, unrolled_selector_type_val, unrolled_ftd)
 );
 --- TODO(tjons) whats the default sort order on disk of the above table? I fear we need
@@ -29,12 +31,12 @@ CREATE INDEX IF NOT EXISTS spiffe_id_idx ON registered_entries (spiffe_id) USING
 CREATE INDEX IF NOT EXISTS hint_idx ON registered_entries (hint) USING 'sai';
 CREATE INDEX IF NOT EXISTS federated_trust_domain_idx ON registered_entries (federated_trust_domains) USING 'sai';
 CREATE INDEX IF NOT EXISTS downstream_idx ON registered_entries (downstream) USING 'sai';
-CREATE INDEX IF NOT EXISTS selector_types ON registered_entries (selector_types) USING 'sai';
-CREATE INDEX IF NOT EXISTS selector_values_idx ON registered_entries (selector_values) USING 'sai';
 CREATE INDEX IF NOT EXISTS expiry_idx ON registered_entries (expiry) USING 'sai';
 CREATE INDEX IF NOT EXISTS indices_idx ON registered_entries (index_terms) USING 'sai';
 CREATE INDEX IF NOT EXISTS unrolled_ftd_idx ON registered_entries (unrolled_ftd) USING 'sai';
 CREATE INDEX IF NOT EXISTS unrolled_selector_type_val_idx ON registered_entries (unrolled_selector_type_val) USING 'sai';
+CREATE INDEX IF NOT EXISTS selector_type_value_full_idx ON registered_entries (FULL(selector_type_value_full)) USING 'sai';
+CREATE INDEX IF NOT EXISTS federated_trust_domains_full_idx ON registered_entries (FULL(federated_trust_domains_full)) USING 'sai';
 
 --- TODO:(tjons) should this be collapsed with the above?
 CREATE TABLE IF NOT EXISTS registered_entries_events (
