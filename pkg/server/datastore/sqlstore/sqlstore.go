@@ -4708,7 +4708,7 @@ func makeFederatesWith(tx *gorm.DB, ids []string) ([]*Bundle, error) {
 
 	for _, id := range ids {
 		if !idset[id] {
-			return nil, fmt.Errorf("unable to find federated bundle %q", id)
+			return nil, fmt.Errorf("unable to find federated bundle %q", id) // Should be codes.NotFound?
 		}
 	}
 

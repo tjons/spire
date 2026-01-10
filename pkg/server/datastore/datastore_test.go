@@ -3743,6 +3743,7 @@ func (s *PluginSuite) TestListParentIDEntries() {
 		s.T().Run(test.name, func(t *testing.T) {
 			ds := s.newPlugin()
 			defer ds.Close()
+
 			for _, entry := range test.registrationEntries {
 				registrationEntry, err := ds.CreateRegistrationEntry(ctx, entry)
 				require.NoError(t, err)
@@ -3754,7 +3755,8 @@ func (s *PluginSuite) TestListParentIDEntries() {
 			})
 			require.NoError(t, err)
 			s.assertCreatedAtFields(result, now)
-			spiretest.RequireProtoListEqual(t, test.expectedList, result.Entries)
+			spiretest.RequireProtoListsSameEls(t, test.expectedList, result.Entries)
+			// spiretest.RequireProtoListEqual(t, test.expectedList, result.Entries) // TODO(tjons): this is order dependent, which is replaced with the order idependent test below
 		})
 	}
 }

@@ -3,6 +3,7 @@ package cassandra
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"maps"
 	"math"
 	"slices"
@@ -115,6 +116,34 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 		return nil, err
 	}
 
+	if entry.FederatesWith != nil {
+		bundles, err := p.ListBundles(ctx, &datastore.ListBundlesRequest{})
+		if err != nil {
+			return nil, newWrappedCassandraError(err)
+		}
+
+		ftds := make(map[string]bool, len(entry.FederatesWith))
+		for _, ftd := range entry.FederatesWith {
+			ftds[ftd] = false
+		}
+
+		for _, b := range bundles.Bundles {
+			if _, ok := ftds[b.TrustDomainId]; ok {
+				ftds[b.TrustDomainId] = true
+			}
+		}
+
+		for ftd, found := range ftds {
+			if !found {
+				return nil, fmt.Errorf("unable to find federated bundle %q", ftd)
+			}
+		}
+	}
+
+	return createRegistrationEntry(ctx, p.db.session, entry)
+}
+
+func createRegistrationEntry(ctx context.Context, s *gocql.Session, entry *common.RegistrationEntry) (*common.RegistrationEntry, error) {
 	var entryID string
 
 	if len(entry.EntryId) > 0 {
@@ -143,7 +172,7 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 		DNSNames:              entry.DnsNames,
 	}
 
-	b := p.db.session.Batch(gocql.LoggedBatch)
+	b := s.Batch(gocql.LoggedBatch)
 
 	indexes := buildIndexesForRegistrationEntry(entry)
 
@@ -851,6 +880,7 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 			b := strings.Builder{}
 			b.WriteString(selectorMatchPrefix)
 			b.WriteString(matcherSupersetInfix)
+
 			for i, sl := range req.BySelectors.Selectors {
 				if i > 0 {
 					b.WriteString("__")
@@ -998,29 +1028,27 @@ func buildFtdAnyMatchIndexes(trustDomains []string) []string {
 }
 
 func buildFtdSupersetMatchIndexes(trustDomains []string) []string {
+	powerset := Combinations(trustDomains)
+
 	indexes := make([]string, 0, len(trustDomains))
-	allIdx := strings.Builder{}
-	allIdx.WriteString(ftdIndexPrefix)
-	allIdx.WriteString(matcherSupersetInfix)
 
-	for i, td := range trustDomains {
-		if i > 0 {
-			allIdx.WriteString("__")
-		}
-
+	for _, subset := range powerset {
 		b := strings.Builder{}
 		b.WriteString(ftdIndexPrefix)
 		b.WriteString(matcherSupersetInfix)
-		b.WriteString("td_")
-		b.WriteString(td)
 
-		allIdx.WriteString("td_")
-		allIdx.WriteString(td)
+		for i, sub := range subset {
+			if i > 0 {
+				b.WriteString("__")
+			}
+			b.WriteString("td_")
+			b.WriteString(sub)
+		}
 
 		indexes = append(indexes, b.String())
 	}
 
-	return append(indexes, allIdx.String())
+	return indexes
 }
 
 func buildSelectorIndexes(selectors []*common.Selector) (indexes []string) {
@@ -1074,33 +1102,29 @@ func buildSelectorMatchExactIndex(selectors []*common.Selector) string {
 }
 
 func buildSelectorSupersetMatchIndexes(selectors []*common.Selector) []string {
+	powerset := Combinations(selectors)
+
 	indexes := make([]string, 0, len(selectors))
-	allIdx := strings.Builder{}
-	allIdx.WriteString(selectorMatchPrefix)
-	allIdx.WriteString(matcherSupersetInfix)
 
-	for i, s := range selectors {
-		if i > 0 {
-			allIdx.WriteString("__")
-		}
-
+	for _, subset := range powerset {
 		b := strings.Builder{}
 		b.WriteString(selectorMatchPrefix)
 		b.WriteString(matcherSupersetInfix)
-		b.WriteString("type_")
-		b.WriteString(s.Type)
-		b.WriteString("_value_")
-		b.WriteString(s.Value)
 
-		allIdx.WriteString("type_")
-		allIdx.WriteString(s.Type)
-		allIdx.WriteString("_value_")
-		allIdx.WriteString(s.Value)
+		for i, sub := range subset {
+			if i > 0 {
+				b.WriteString("__")
+			}
+			b.WriteString("type_")
+			b.WriteString(sub.Type)
+			b.WriteString("_value_")
+			b.WriteString(sub.Value)
+		}
 
 		indexes = append(indexes, b.String())
 	}
 
-	return append(indexes, allIdx.String())
+	return indexes
 }
 
 func (p *plugin) PruneRegistrationEntries(ctx context.Context, expiresBefore time.Time) error {
