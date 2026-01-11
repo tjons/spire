@@ -23,8 +23,7 @@ CREATE TABLE IF NOT EXISTS registered_entries (
     federated_trust_domains_full frozen<list<text>> STATIC,
     PRIMARY KEY (entry_id, unrolled_selector_type_val, unrolled_ftd)
 );
---- TODO(tjons) whats the default sort order on disk of the above table? I fear we need
---- to sort these by creation time... ugh
+--- Is there any way we can force a sort order?
 
 CREATE INDEX IF NOT EXISTS parent_id_idx ON registered_entries (parent_id) USING 'sai';
 CREATE INDEX IF NOT EXISTS spiffe_id_idx ON registered_entries (spiffe_id) USING 'sai';
@@ -48,28 +47,33 @@ CREATE TABLE IF NOT EXISTS registration_entry_events (
 CREATE INDEX IF NOT EXISTS registration_entry_events_entry_id_idx ON registration_entry_events (id) USING 'sai';
 
 CREATE TABLE IF NOT EXISTS attested_node_entries (
-    id int,
-    created_at timestamp,
+    created_at timestamp STATIC,
     updated_at timestamp,
     spiffe_id varchar,
-    data_type varchar,
-    serial_number varchar,
-    expires_at timestamp,
-    new_serial_number varchar,
-    new_expires_at timestamp,
-    can_reattest boolean,
-    selector_type varchar,
-    selector_value varchar,
-    PRIMARY KEY (spiffe_id)
+    data_type varchar STATIC,
+    serial_number varchar STATIC,
+    expires_at timestamp STATIC,
+    new_serial_number varchar STATIC,
+    new_expires_at timestamp STATIC,
+    can_reattest boolean STATIC,
+    selector_type_value varchar,
+    selector_type_value_full frozen<list<text>> STATIC,
+    PRIMARY KEY (spiffe_id, selector_type_value)
 );
 
+CREATE INDEX IF NOT EXISTS expires_at_idx ON attested_node_entries (expires_at) USING 'sai';
+CREATE INDEX IF NOT EXISTS selector_type_value_idx ON attested_node_entries (selector_type_value) USING 'sai';
+CREATE INDEX IF NOT EXISTS selector_type_value_full_idx ON attested_node_entries (FULL(selector_type_value_full)) USING 'sai';
+
 CREATE TABLE IF NOT EXISTS attested_node_entries_events (
-    id int,
+    event_id int,
     created_at timestamp,
     updated_at timestamp,
     spiffe_id varchar,
-    PRIMARY KEY (spiffe_id, id)
+    PRIMARY KEY (spiffe_id, event_id)
 );
+CREATE INDEX IF NOT EXISTS attested_node_entries_events_event_id_idx ON attested_node_entries_events (event_id) USING 'sai';
+CREATE INDEX IF NOT EXISTS attested_node_entries_events_created_at_idx ON attested_node_entries_events (created_at) USING 'sai';
 
 CREATE TABLE IF NOT EXISTS bundles (
     created_at timestamp STATIC,

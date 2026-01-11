@@ -152,8 +152,8 @@ would have these `filter_val` rows:
 - [x] TestPruneJoinTokens()
 
 #### Area: Nodes
-- [ ] TestCreateAttestedNode()
-- [ ] TestFetchAttestedNodeMissing()
+- [x] TestCreateAttestedNode()
+- [x] TestFetchAttestedNodeMissing()
 - [ ] TestListAttestedNodes()
 - [ ] TestUpdateAttestedNode()
 - [ ] TestPruneAttestedExpiredNodes()
