@@ -164,7 +164,7 @@ func TestCombinations(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		ret := Combinations(c.els)
+		ret := powerSlice(c.els)
 		if len(ret) != len(c.expected) {
 			t.Fatalf("unxepected length")
 		}

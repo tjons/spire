@@ -46,7 +46,7 @@
                 // "^(TestBundleCRUD|TestCountBundles|TestBundlePrune|TestSetBundle)$",
                 // "^(TestListRegistrationEntries)$"
                 // "^(TestDeleteFederationRelationship|TestFetchFederationRelationship|TestCreateFederationRelationship|TestListFederationRelationships|TestUpdateFederationRelationship)$"
-                "^(TestPruneRegistrationEntries)$"
+                "^(TestListFederationRelationships)$"
             ],
             "preLaunchTask":"start cassandra",
             "postDebugTask": "stop cassandra",

@@ -4,8 +4,6 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 
 ## Cassandra Schema
 
-
-
 ## Implemented
 - Alternative datastore configuration loading via experimental settings.
 - Interface type for the cassandra implementation and restructuring of the existing plugin where necessary
@@ -18,9 +16,12 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 - Cassandra tests with pluggable mode
 - Isolatable debuggable tests
 - Bundles
+- teardown for cassandra test suite
 
 ## To Be Implemented
 - Pagination
+  - mostly about rethinking and revisiting how we test this, making "peeking" configurable, 
+  - damn, PAGINATION IS SUPPOSED TO BE ABOUT RETRIEVING THE CURRENT PAGE, NOT THE NEXT ONE!!!
 - sqlite tests in pluggable integration test mode
 - Bundle federation relationship and deletion interactions
 - general approach to consistency
@@ -29,7 +30,6 @@ This is a proof-of-concept implementation of Apache Cassandra as a backing datas
 - replace migrations
 - configurable topology strategy
 - allow running test suite after failure
-- teardown
 - handling the new Validate() process without introducing package dependency issues
 
 ## Some challenges
@@ -123,7 +123,7 @@ would have these `filter_val` rows:
 - [x] TestRegistrationEntriesFederatesWithAgainstMissingBundle()
 - [x] TestRegistrationEntriesFederatesWithSuccess()
 - [ ] TestListRegistrationEntryEvents()
-- [ ] TestPruneRegistrationEntryEvents()
+- [x] TestPruneRegistrationEntryEvents()
 
 #### Area: CA Journal
 - [x] TestSetCAJournal()

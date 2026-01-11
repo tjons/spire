@@ -4967,11 +4967,13 @@ func (s *PluginSuite) TestListFederationRelationships() {
 	s.Require().NoError(err)
 
 	tests := []struct {
-		name               string
-		pagination         *datastore.Pagination
-		expectedList       []*datastore.FederationRelationship
-		expectedPagination *datastore.Pagination
-		expectedErr        string
+		name                   string
+		pagination             *datastore.Pagination
+		expectedList           []*datastore.FederationRelationship
+		expectedPagination     *datastore.Pagination
+		expectedErr            string
+		usePrevPaginationToken bool
+		sequenceTest           bool
 	}{
 		{
 			name:         "no pagination",
@@ -4984,7 +4986,6 @@ func (s *PluginSuite) TestListFederationRelationships() {
 			},
 			expectedList: []*datastore.FederationRelationship{fr1, fr2, fr3, fr4},
 			expectedPagination: &datastore.Pagination{
-				Token:    "4",
 				PageSize: 5,
 			},
 		},
@@ -4996,9 +4997,9 @@ func (s *PluginSuite) TestListFederationRelationships() {
 			expectedErr: "rpc error: code = InvalidArgument desc = cannot paginate with pagesize = 0",
 		},
 		{
-			name: "bundles first page",
+			name: "federation relationships first page",
 			pagination: &datastore.Pagination{
-				Token:    "0",
+				Token:    "",
 				PageSize: 2,
 			},
 			expectedList: []*datastore.FederationRelationship{fr1, fr2},
@@ -5006,6 +5007,7 @@ func (s *PluginSuite) TestListFederationRelationships() {
 				Token:    "2",
 				PageSize: 2,
 			},
+			sequenceTest: true,
 		},
 		{
 			name: "federation relationships second page",
@@ -5018,6 +5020,8 @@ func (s *PluginSuite) TestListFederationRelationships() {
 				Token:    "4",
 				PageSize: 2,
 			},
+			usePrevPaginationToken: true,
+			sequenceTest:           true,
 		},
 		{
 			name:         "federation relationships third page",
@@ -5030,6 +5034,8 @@ func (s *PluginSuite) TestListFederationRelationships() {
 				Token:    "",
 				PageSize: 2,
 			},
+			usePrevPaginationToken: true,
+			sequenceTest:           true,
 		},
 		{
 			name:         "invalid token",
@@ -5044,11 +5050,34 @@ func (s *PluginSuite) TestListFederationRelationships() {
 			},
 		},
 	}
+	var (
+		expectedItems = map[string]*datastore.FederationRelationship{
+			fr1.TrustDomain.IDString(): fr1,
+			fr2.TrustDomain.IDString(): fr2,
+			fr3.TrustDomain.IDString(): fr3,
+			fr4.TrustDomain.IDString(): fr4,
+		}
+		nextPaginationToken string
+		seenItemsCount      int
+		seenItems           = map[string]bool{
+			fr1.TrustDomain.IDString(): false,
+			fr2.TrustDomain.IDString(): false,
+			fr3.TrustDomain.IDString(): false,
+			fr4.TrustDomain.IDString(): false,
+		}
+	)
+
 	for _, test := range tests {
 		s.T().Run(test.name, func(t *testing.T) {
-			resp, err := s.ds.ListFederationRelationships(ctx, &datastore.ListFederationRelationshipsRequest{
+			req := &datastore.ListFederationRelationshipsRequest{
 				Pagination: test.pagination,
-			})
+			}
+
+			if test.usePrevPaginationToken {
+				req.Pagination.Token = nextPaginationToken
+			}
+
+			resp, err := s.ds.ListFederationRelationships(ctx, req)
 			if test.expectedErr != "" {
 				require.EqualError(t, err, test.expectedErr)
 				return
@@ -5056,13 +5085,37 @@ func (s *PluginSuite) TestListFederationRelationships() {
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 
-			require.Len(t, resp.FederationRelationships, len(test.expectedList))
-			for i, each := range resp.FederationRelationships {
-				assertFederationRelationship(t, test.expectedList[i], each)
+			require.Equal(t, len(test.expectedList), len(resp.FederationRelationships))
+
+			for _, fr := range resp.FederationRelationships {
+				expFR, ok := expectedItems[fr.TrustDomain.IDString()]
+				require.True(t, ok, "unexpected federation relationship for trust domain %q", fr.TrustDomain.IDString())
+				assertFederationRelationship(t, expFR, fr)
+
+				if test.sequenceTest {
+					seenItemsCount++
+					seenItems[fr.TrustDomain.IDString()] = true
+				}
 			}
 
-			require.Equal(t, test.expectedPagination, resp.Pagination)
+			if test.sequenceTest {
+				require.LessOrEqual(t, seenItemsCount, len(seenItems))
+			}
+
+			// TODO(tjons): explain philosophy about pagination
+			if test.expectedPagination != nil {
+				require.Equal(t, test.expectedPagination.PageSize, resp.Pagination.PageSize)
+
+				if len(test.expectedPagination.Token) > 0 {
+					require.True(t, len(resp.Pagination.Token) > 0)
+					nextPaginationToken = resp.Pagination.Token
+				}
+			}
 		})
+	}
+
+	for trustDomain, seen := range seenItems {
+		require.Truef(s.T(), seen, "trust domain %q was not seen in any of the paginated results", trustDomain)
 	}
 }
 

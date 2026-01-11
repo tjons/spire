@@ -156,15 +156,17 @@ func (p *plugin) ListFederationRelationships(ctx context.Context, req *datastore
 	query := p.db.session.Query(listQ)
 
 	if req.Pagination != nil {
-		query = query.PageSize(int(req.Pagination.PageSize))
+		query.PageSize(int(req.Pagination.PageSize))
 
 		if req.Pagination.Token != "" {
-			t, err := base64.StdEncoding.DecodeString(req.Pagination.Token)
+			t, err := base64.URLEncoding.Strict().DecodeString(req.Pagination.Token)
 			if err != nil {
 				return nil, status.Errorf(codes.InvalidArgument, "could not parse token '%s'", req.Pagination.Token)
 			}
 
-			query = query.PageState(t)
+			query.PageState(t)
+		} else {
+			query.PageState(nil)
 		}
 	}
 
@@ -172,7 +174,6 @@ func (p *plugin) ListFederationRelationships(ctx context.Context, req *datastore
 		FederationRelationships: []*datastore.FederationRelationship{},
 	}
 	iter := query.Iter()
-	nextPageState := iter.PageState()
 	scanner := iter.Scanner()
 	for scanner.Next() {
 		record := new(federatedTrustDomainRecord)
@@ -195,14 +196,20 @@ func (p *plugin) ListFederationRelationships(ctx context.Context, req *datastore
 	if err := scanner.Err(); err != nil {
 		return nil, newWrappedCassandraError(fmt.Errorf("unable to list federation relationships: %w", err))
 	}
+	nextPageState := iter.PageState()
 
 	if req.Pagination != nil {
 		resp.Pagination = &datastore.Pagination{
 			PageSize: req.Pagination.PageSize,
 		}
 
-		if len(nextPageState) > 0 {
-			resp.Pagination.Token = base64.StdEncoding.EncodeToString(nextPageState)
+		// TODO(tjons): at a minimum, toss this behind a feature flag
+		peeker := p.db.session.Query(listQ).PageSize(1).PageState(nextPageState).Iter()
+		if peeker.NumRows() > 0 {
+			resp.Pagination.Token = base64.URLEncoding.Strict().EncodeToString(nextPageState)
+		}
+		if err := peeker.Close(); err != nil {
+			return nil, newWrappedCassandraError(fmt.Errorf("unable to determine pagination token: %w", err))
 		}
 	}
 

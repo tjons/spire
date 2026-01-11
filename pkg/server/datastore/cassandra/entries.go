@@ -848,7 +848,7 @@ func (p *plugin) ListRegistrationEntries(ctx context.Context, req *datastore.Lis
 	return r, nil
 }
 
-func Combinations[T any](els []T) [][]T {
+func powerSlice[T any](els []T) [][]T {
 	if len(els) == 0 {
 		return [][]T{}
 	}
@@ -896,7 +896,7 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 				selectors[i] = b.String()
 			}
 
-			vals := Combinations(selectors)
+			vals := powerSlice(selectors)
 
 			indices = append(indices, queryTerm{
 				field:           "selector_type_value_full",
@@ -959,7 +959,7 @@ func generateSearchIndexesForRequest(req *datastore.ListRegistrationEntriesReque
 				tds[i] = td
 			}
 
-			vals := Combinations(tds)
+			vals := powerSlice(tds)
 			indices = append(indices, queryTerm{
 				field:           "federated_trust_domains_full",
 				operator:        "IN",
@@ -1072,7 +1072,7 @@ func buildFtdAnyMatchIndexes(trustDomains []string) []string {
 }
 
 func buildFtdSupersetMatchIndexes(trustDomains []string) []string {
-	powerset := Combinations(trustDomains)
+	powerset := powerSlice(trustDomains)
 
 	indexes := make([]string, 0, len(trustDomains))
 
@@ -1146,7 +1146,7 @@ func buildSelectorMatchExactIndex(selectors []*common.Selector) string {
 }
 
 func buildSelectorSupersetMatchIndexes(selectors []*common.Selector) []string {
-	powerset := Combinations(selectors)
+	powerset := powerSlice(selectors)
 
 	indexes := make([]string, 0, len(selectors))
 
