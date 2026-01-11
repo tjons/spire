@@ -38,14 +38,14 @@ CREATE INDEX IF NOT EXISTS unrolled_selector_type_val_idx ON registered_entries 
 CREATE INDEX IF NOT EXISTS selector_type_value_full_idx ON registered_entries (FULL(selector_type_value_full)) USING 'sai';
 CREATE INDEX IF NOT EXISTS federated_trust_domains_full_idx ON registered_entries (FULL(federated_trust_domains_full)) USING 'sai';
 
---- TODO:(tjons) should this be collapsed with the above?
-CREATE TABLE IF NOT EXISTS registered_entries_events (
+CREATE TABLE IF NOT EXISTS registration_entry_events (
     id int,
     created_at timestamp,
     updated_at timestamp,
     entry_id varchar,
-    PRIMARY KEY((id), entry_id)
-);
+    PRIMARY KEY(entry_id, id)
+);  
+CREATE INDEX IF NOT EXISTS registration_entry_events_entry_id_idx ON registration_entry_events (id) USING 'sai';
 
 CREATE TABLE IF NOT EXISTS attested_node_entries (
     id int,

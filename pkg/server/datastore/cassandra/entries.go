@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"maps"
 	"math"
-	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -140,7 +138,16 @@ func (p *plugin) CreateRegistrationEntry(ctx context.Context, entry *common.Regi
 		}
 	}
 
-	return createRegistrationEntry(ctx, p.db.session, entry)
+	newEntry, err = createRegistrationEntry(ctx, p.db.session, entry)
+	if err != nil {
+		return nil, err
+	}
+
+	err = p.createRegistrationEntryEvent(ctx, &datastore.RegistrationEntryEvent{
+		EntryID: newEntry.EntryId,
+	})
+
+	return newEntry, err
 }
 
 func createRegistrationEntry(ctx context.Context, s *gocql.Session, entry *common.RegistrationEntry) (*common.RegistrationEntry, error) {
@@ -367,7 +374,38 @@ func validateRegistrationEntry(entry *common.RegistrationEntry) error {
 }
 
 func (p *plugin) CreateOrReturnRegistrationEntry(ctx context.Context, re *common.RegistrationEntry) (*common.RegistrationEntry, bool, error) {
-	return nil, false, NotImplementedErr
+	if err := validateRegistrationEntry(re); err != nil {
+		return nil, false, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	resp, err := p.ListRegistrationEntries(ctx, &datastore.ListRegistrationEntriesRequest{
+		ByParentID: re.ParentId,
+		BySpiffeID: re.SpiffeId,
+		BySelectors: &datastore.BySelectors{
+			Match:     datastore.Exact,
+			Selectors: re.Selectors,
+		},
+	})
+	if err != nil {
+		return nil, false, newWrappedCassandraError(err)
+	}
+
+	if len(resp.Entries) > 0 {
+		return resp.Entries[0], true, nil
+	}
+
+	newEntry, err := p.CreateRegistrationEntry(ctx, re)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if err := p.createRegistrationEntryEvent(ctx, &datastore.RegistrationEntryEvent{
+		EntryID: newEntry.EntryId,
+	}); err != nil {
+		return nil, false, err
+	}
+
+	return newEntry, false, nil
 }
 
 func (p *plugin) DeleteRegistrationEntry(ctx context.Context, entryID string) (*common.RegistrationEntry, error) {
@@ -382,6 +420,12 @@ func (p *plugin) DeleteRegistrationEntry(ctx context.Context, entryID string) (*
 
 	if err := deleteRegistrationEntry(p.db.session, entries[entryID]); err != nil {
 		return nil, newWrappedCassandraError(err)
+	}
+
+	if err := p.createRegistrationEntryEvent(ctx, &datastore.RegistrationEntryEvent{
+		EntryID: entryID,
+	}); err != nil {
+		return nil, err
 	}
 
 	return entries[entryID], nil
@@ -1129,7 +1173,7 @@ func buildSelectorSupersetMatchIndexes(selectors []*common.Selector) []string {
 
 func (p *plugin) PruneRegistrationEntries(ctx context.Context, expiresBefore time.Time) error {
 	selectPruneQuery := `
-		SELECT DISTINCT entry_id, spiffe_id, parent_id FROM registered_entries WHERE expiry IS NOT NULL AND expiry < ?
+		SELECT DISTINCT entry_id, spiffe_id, parent_id, federated_trust_domains FROM registered_entries WHERE expiry < ?
 		`
 	query := p.db.session.Query(selectPruneQuery, expiresBefore.Unix())
 	query.Consistency(gocql.LocalQuorum)
@@ -1137,42 +1181,71 @@ func (p *plugin) PruneRegistrationEntries(ctx context.Context, expiresBefore tim
 	iter := query.Iter()
 
 	type entryToPrune struct {
-		entryID  string
-		spiffeID string
-		parentID string
+		entryID               string
+		spiffeID              string
+		parentID              string
+		federatedTrustDomains []string
 	}
 
-	entries := make(map[string]entryToPrune, iter.NumRows())
+	entries := make([]entryToPrune, 0, iter.NumRows())
 	scanner := iter.Scanner()
 
 	for scanner.Next() {
 		var entry entryToPrune
-		err := scanner.Scan(&entry.entryID, &entry.spiffeID, &entry.parentID)
+		err := scanner.Scan(&entry.entryID, &entry.spiffeID, &entry.parentID, &entry.federatedTrustDomains)
 		if err != nil {
 			return newWrappedCassandraError(err)
 		}
-		entries[entry.entryID] = entry
+		entries = append(entries, entry)
 	}
 	if err := iter.Close(); err != nil {
 		return newWrappedCassandraError(err)
 	}
 
-	delIds := slices.Collect(maps.Keys(entries))
-	deletePruneQuery := `DELETE FROM registered_entries WHERE entry_id IN (?)`
-	deleteFederatedQuery := `DELETE FROM bundles WHERE federated_entry_id IN (?)`
+	deletePruneQueryBuilder := strings.Builder{}
+	deletePruneQueryBuilder.WriteString(`DELETE FROM registered_entries WHERE entry_id IN (`)
 
+	delIds := make([]any, len(entries))
 	b := p.db.session.Batch(gocql.LoggedBatch)
 
-	b.Query(deletePruneQuery, delIds)
-	b.Query(deleteFederatedQuery, delIds)
+	for i := range entries {
+		if i > 0 {
+			deletePruneQueryBuilder.WriteString(",")
+		}
+		deletePruneQueryBuilder.WriteString("?")
+
+		if len(entries[i].federatedTrustDomains) > 0 {
+			deleteBundlesArgs := make([]any, 0)
+			deleteBundlesQueryBuilder := strings.Builder{}
+			deleteBundlesQueryBuilder.WriteString(`DELETE FROM bundles WHERE trust_domain IN (`)
+			for _, td := range entries[i].federatedTrustDomains {
+				deleteBundlesQueryBuilder.WriteString("?,")
+				deleteBundlesArgs = append(deleteBundlesArgs, td)
+			}
+			deleteBundlesQueryBuilder.WriteString(")")
+			deleteBundlesQueryBuilder.WriteString(" AND federated_entry_id = ?")
+			deleteBundlesArgs = append(deleteBundlesArgs, entries[i].entryID)
+
+			b.Query(deleteBundlesQueryBuilder.String(), deleteBundlesArgs...)
+		}
+
+		delIds[i] = entries[i].entryID
+	}
+	deletePruneQueryBuilder.WriteString(")")
+
+	b.Query(deletePruneQueryBuilder.String(), delIds...)
 
 	if err := b.Exec(); err != nil {
 		return newWrappedCassandraError(err)
 	}
 
-	// TODO(tjons): handle registration entry events
-
 	for _, entry := range entries {
+		if err := p.createRegistrationEntryEvent(ctx, &datastore.RegistrationEntryEvent{
+			EntryID: entry.entryID,
+		}); err != nil {
+			p.log.WithError(err).WithField(telemetry.RegistrationID, entry.entryID).Error("Failed to create registration entry event for pruned entry")
+		}
+
 		p.log.WithFields(logrus.Fields{
 			telemetry.SPIFFEID:       entry.spiffeID,
 			telemetry.ParentID:       entry.parentID,

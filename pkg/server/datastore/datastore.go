@@ -241,7 +241,7 @@ type ListRegistrationEntryEventsRequest struct {
 }
 
 type RegistrationEntryEvent struct {
-	EventID uint
+	EventID uint // would really be great if we could make this a string...
 	EntryID string
 }
 
