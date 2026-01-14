@@ -143,6 +143,8 @@ type Config struct {
 
 	// DisableWITSVIDs, if true, WIT-SVID profile is disabled
 	DisableWITSVIDs bool
+	// ExperimentalAllowPluggableDatastore, if true, allows the use of the Cassandra datastore
+	ExperimentalAllowPluggableDatastore bool
 }
 
 type ExperimentalConfig struct{}

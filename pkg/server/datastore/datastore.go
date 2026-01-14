@@ -33,7 +33,7 @@ type DataStore interface {
 	CountRegistrationEntries(context.Context, *CountRegistrationEntriesRequest) (int32, error)
 	CreateRegistrationEntry(context.Context, *common.RegistrationEntry) (*common.RegistrationEntry, error)
 	CreateOrReturnRegistrationEntry(context.Context, *common.RegistrationEntry) (*common.RegistrationEntry, bool, error)
-	DeleteRegistrationEntry(ctx context.Context, entryID string) (*common.RegistrationEntry, error)
+	DeleteRegistrationEntry(ctx context.Context, entryID string) (*common.RegistrationEntry, error) // TODO(tjons): it would be really nice if we didn't have to return from delete
 	FetchRegistrationEntry(ctx context.Context, entryID string) (*common.RegistrationEntry, error)
 	FetchRegistrationEntries(ctx context.Context, entryIDs []string) (map[string]*common.RegistrationEntry, error)
 	ListRegistrationEntries(context.Context, *ListRegistrationEntriesRequest) (*ListRegistrationEntriesResponse, error)
@@ -86,6 +86,13 @@ type DataStore interface {
 	FetchCAJournal(ctx context.Context, activeX509AuthorityID string) (*CAJournal, error)
 	PruneCAJournals(ctx context.Context, allCAsExpireBefore int64) error
 	ListCAJournalsForTesting(ctx context.Context) ([]*CAJournal, error)
+
+	// Added temporarily(?) while experimenting with pluggable datastores
+	// TODO(tjons): figure out what to do with these
+	Close() error
+	Configure(_ context.Context, hclConfiguration string) error
+
+	Validate(ctx context.Context, configuration string) error
 }
 
 // DataConsistency indicates the required data consistency for a read operation.
@@ -234,7 +241,7 @@ type ListRegistrationEntryEventsRequest struct {
 }
 
 type RegistrationEntryEvent struct {
-	EventID uint
+	EventID uint // would really be great if we could make this a string...
 	EntryID string
 }
 
