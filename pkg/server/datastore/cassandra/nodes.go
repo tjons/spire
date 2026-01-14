@@ -7,6 +7,7 @@ import (
 
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
 	"github.com/spiffe/spire/pkg/server/datastore"
+	"github.com/spiffe/spire/pkg/server/datastore/cassandra/qb"
 	"github.com/spiffe/spire/proto/spire/common"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -161,7 +162,10 @@ func (p *plugin) DeleteAttestedNode(ctx context.Context, spiffeID string) (*comm
 		return nil, status.Error(codes.NotFound, NotFoundErr.Error())
 	}
 
-	q := `DELETE FROM attested_node_entries WHERE spiffe_id = ?`
+	query := qb.NewDelete().
+		From("attested_node_entries").
+		Where("spiffe_id", qb.Eq, spiffeID)
+	q, _ := query.Build()
 	if err := p.db.session.Query(q, spiffeID).ExecContext(ctx); err != nil {
 		return nil, newWrappedCassandraError(err)
 	}
@@ -174,22 +178,25 @@ func (p *plugin) DeleteAttestedNode(ctx context.Context, spiffeID string) (*comm
 }
 
 func (p *plugin) FetchAttestedNode(ctx context.Context, spiffeID string) (*common.AttestedNode, error) {
-	q := `SELECT
-			spiffe_id,
-			data_type,
-			serial_number,
-			expires_at,
-			new_serial_number,
-			new_expires_at,
-			can_reattest,
-			selector_type_value_full
-		FROM attested_node_entries
-		WHERE spiffe_id = ? LIMIT 1
-	`
+	q := qb.NewSelect().
+		Column("spiffe_id").
+		Column("data_type").
+		Column("serial_number").
+		Column("expires_at").
+		Column("new_serial_number").
+		Column("new_expires_at").
+		Column("can_reattest").
+		Column("selector_type_value_full").
+		From("attested_node_entries").
+		Where("spiffe_id", qb.Eq, spiffeID).
+		Limit(1)
+	query, _ := q.Build()
 
-	var model AttestedNode
-	var selectorTypeValueFull []string
-	if err := p.db.session.Query(q, spiffeID).ScanContext(ctx,
+	var (
+		model                 AttestedNode
+		selectorTypeValueFull []string
+	)
+	if err := p.db.session.Query(query, spiffeID).ScanContext(ctx,
 		&model.SpiffeID,
 		&model.DataType,
 		&model.SerialNumber,
@@ -224,4 +231,100 @@ func (p *plugin) UpdateAttestedNode(ctx context.Context, node *common.AttestedNo
 
 func (p *plugin) PruneAttestedExpiredNodes(ctx context.Context, expiredBefore time.Time, includeNonReattestable bool) error {
 	return NotImplementedErr
+}
+
+func (p *plugin) GetNodeSelectors(ctx context.Context, spiffeID string, dataConsistency datastore.DataConsistency) ([]*common.Selector, error) {
+	q := qb.NewSelect().
+		Column("selector_type_value_full").
+		From("attested_node_entries").
+		Where("spiffe_id", qb.Eq, spiffeID).
+		Limit(1)
+	query, _ := q.Build()
+
+	var selectorTypeValueFull []string
+	if err := p.db.session.Query(query, spiffeID).ScanContext(ctx, &selectorTypeValueFull); err != nil {
+		if err == gocql.ErrNotFound {
+			return nil, status.Error(codes.NotFound, NotFoundErr.Error())
+		}
+		return nil, newWrappedCassandraError(err)
+	}
+
+	selectors := make([]*common.Selector, len(selectorTypeValueFull))
+	for i, stv := range selectorTypeValueFull {
+		selType, selValue, _ := strings.Cut(stv, "|")
+		selectors[i] = &common.Selector{
+			Type:  selType,
+			Value: selValue,
+		}
+	}
+
+	return selectors, nil
+}
+
+func (p *plugin) ListNodeSelectors(ctx context.Context, req *datastore.ListNodeSelectorsRequest) (*datastore.ListNodeSelectorsResponse, error) {
+	q := qb.NewSelect().
+		Distinct().
+		Column("spiffe_id").
+		Column("selector_type_value_full").
+		From("attested_node_entries").
+		AllowFiltering()
+
+	if req.ValidAt.Unix() != 0 {
+		q.Where("expires_at", qb.Gt, req.ValidAt)
+	}
+
+	query, _ := q.Build()
+
+	iter := p.db.session.Query(query).Iter()
+	scanner := iter.Scanner()
+	resp := &datastore.ListNodeSelectorsResponse{
+		Selectors: make(map[string][]*common.Selector, iter.NumRows()),
+	}
+
+	for scanner.Next() {
+		var (
+			spiffeID string
+			stvList  []string
+		)
+		if err := scanner.Scan(&spiffeID, &stvList); err != nil {
+			return nil, newWrappedCassandraError(err)
+		}
+
+		for _, stv := range stvList {
+			selType, selValue, _ := strings.Cut(stv, "|")
+			resp.Selectors[spiffeID] = append(resp.Selectors[spiffeID], &common.Selector{
+				Type:  selType,
+				Value: selValue,
+			})
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, newWrappedCassandraError(err)
+	}
+
+	return resp, nil
+}
+
+func (p *plugin) SetNodeSelectors(ctx context.Context, spiffeID string, selectors []*common.Selector) error {
+	existingSelectors, err := p.GetNodeSelectors(ctx, spiffeID, datastore.RequireCurrent)
+	if err != nil {
+		return err
+	}
+
+	selectorsToDelete := make(map[string]struct{}, len(existingSelectors))
+	selectorsToInsert := make(map[string]struct{}, len(selectors))
+	for _, sel := range existingSelectors {
+		key := sel.Type + "|" + sel.Value
+		selectorsToDelete[key] = struct{}{}
+	}
+
+	for _, sel := range selectors {
+		key := sel.Type + "|" + sel.Value
+		delete(selectorsToDelete, key)
+	}
+
+	return p.createAttestedNodeEvent(ctx, &datastore.AttestedNodeEvent{
+		SpiffeID: spiffeID,
+	})
 }
